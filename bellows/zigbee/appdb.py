@@ -45,7 +45,11 @@ class PersistingListener:
 
     def device_initialized(self, device):
         self._save_device(device)
-
+    
+    """ event to save device information after bellows init finished """     
+    def device_updated(self, device):
+        self._save_device(device)
+        
     def device_left(self, device):
         pass
 
@@ -60,7 +64,6 @@ class PersistingListener:
             attrid,
             value,
         )
-
     def _create_table(self, table_name, spec):
         self.execute("CREATE TABLE IF NOT EXISTS %s %s" % (table_name, spec))
 
