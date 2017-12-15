@@ -94,7 +94,7 @@ DATA_TYPES = {
     # 0x43: ('Long octet string', ),
     # 0x44: ('Long character string', ),
     # 0x48: ('Array', ),
-    # 0x4c: ('Structure', ),
+    0x4c: ('Structure', t.EmberCertificateData, Discrete),
     # 0x50: ('Set', ),
     # 0x51: ('Bag', ),
     0xe0: ('Time of day', t.uint32_t, Analog),
