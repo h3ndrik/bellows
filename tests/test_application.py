@@ -208,6 +208,12 @@ def test_join_handler_skip(app, ieee):
     assert app.devices[ieee].status == device.Status.ZDO_INIT
 
 
+def test_join_handler_change_id(app, ieee):
+    app._handle_join(1, ieee, None, None, None)
+    app._handle_join(2, ieee, None, None, None)
+    assert app.devices[ieee].nwk == 2
+
+
 def test_leave_handler(app, ieee):
     app.devices[ieee] = mock.sentinel.device
     app.ezsp_callback_handler(
@@ -301,8 +307,11 @@ def test_permit_with_key_failed_add_key(app, ieee):
 def _request(app, aps, returnvals, **kwargs):
     @asyncio.coroutine
     def mocksend(method, nwk, aps_frame, seq, data):
-        app._pending[seq][0].set_result(True)
-        app._pending[seq][1].set_result(mock.sentinel.result)
+        if app._pending[seq][1] is None:
+            app._pending[seq][0].set_result(mock.sentinel.result)
+        else:
+            app._pending[seq][0].set_result(True)
+            app._pending[seq][1].set_result(mock.sentinel.result)
         return [returnvals.pop(0)]
 
     app._ezsp.sendUnicast = mocksend
@@ -312,6 +321,10 @@ def _request(app, aps, returnvals, **kwargs):
 
 def test_request(app, aps):
     assert _request(app, aps, [0]) == mock.sentinel.result
+
+
+def test_request_without_reply(app, aps):
+    assert _request(app, aps, [0], expect_reply=False) == mock.sentinel.result
 
 
 def test_request_fail(app, aps):
