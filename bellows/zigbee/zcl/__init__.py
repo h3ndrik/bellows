@@ -143,8 +143,8 @@ class Cluster(util.ListenableMixin, util.LocalLogMixin, metaclass=Registry):
             valuestr = ", ".join([
                 "%s=%s" % (a.attrid, a.value.value) for a in args[0]
             ])
-            self.debug("Attribute report received: %s", valuestr)
             for attr in args[0]:
+                self.debug("Attribute report received: %s:%s:%s", attr.attrid, attr.value.type, attr.value.value )
                 self._update_attribute(attr.attrid, attr.value.value)
         else:
             self.debug("No handler for general command %s", command_id)
