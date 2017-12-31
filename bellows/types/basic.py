@@ -113,6 +113,22 @@ class LVBytes(bytes):
         s = data[1:l + 1]
         return s, data[l + 1:]
 
+class debug(bytes):
+    def serialize(self):
+        return bytes([
+            len(self),
+        ]) + self
+
+    @classmethod
+    def deserialize(cls, data):
+        l=len(data)
+        print(l)
+        if type(data) is str:
+            s = "".join("0x%02x," % ord(b) for b in data)
+        else:
+            s = "".join("0x%02x," % b for b in data)
+#        print ("%s -- %s",s, data[l + 1:])
+        return s 
 
 class _List(list):
     _length = None
