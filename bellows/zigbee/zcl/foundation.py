@@ -1,7 +1,9 @@
 import enum
+import logging
 
 import bellows.types as t
 
+LOGGER = logging.getLogger(__name__)
 
 class Status(t.uint8_t, enum.Enum):
     SUCCESS = 0x00  # Operation was successful.
@@ -50,7 +52,7 @@ class Discrete:
 
 
 DATA_TYPES = {
-    0x00: ('No data', None, None),
+    0x00: ('No data', t.debug, None),
     0x08: ('General', t.fixed_list(1, t.uint8_t), Discrete),
     0x09: ('General', t.fixed_list(2, t.uint8_t), Discrete),
     0x0a: ('General', t.fixed_list(3, t.uint8_t), Discrete),
@@ -60,6 +62,7 @@ DATA_TYPES = {
     0x0e: ('General', t.fixed_list(7, t.uint8_t), Discrete),
     0x0f: ('General', t.fixed_list(8, t.uint8_t), Discrete),
     0x10: ('Boolean', t.Bool, Discrete),
+    0x13: ('String', t.LVBytes, Discrete),
     0x18: ('Bitmap', t.uint8_t, Discrete),
     0x19: ('Bitmap', t.uint16_t, Discrete),
     0x1a: ('Bitmap', t.uint24_t, Discrete),
@@ -94,9 +97,11 @@ DATA_TYPES = {
     # 0x43: ('Long octet string', ),
     # 0x44: ('Long character string', ),
     # 0x48: ('Array', ),
-    0x4c: ('Structure', t.EmberCertificateData, Discrete),
+    0x4c: ('Structure', t.LVBytes, Discrete),
+    # 0x4c: ('Structure', t.List(TypeValue), Discrete),
     # 0x50: ('Set', ),
     # 0x51: ('Bag', ),
+    0xa4: ('xiaomi', t.debug, Discrete ),
     0xe0: ('Time of day', t.uint32_t, Analog),
     0xe1: ('Date', t.uint32_t, Analog),
     0xe2: ('UTCTime', t.uint32_t, Analog),
@@ -125,9 +130,22 @@ class TypeValue():
     @classmethod
     def deserialize(cls, data):
         self = cls()
-        self.type, data = data[0], data[1:]
-        actual_type = DATA_TYPES[self.type][1]
+        try:
+            self.type, data = data[0], data[1:]
+        except:
+            LOGGER.debug("TypeValue error_ %s ", data)
+            actual_type=0xff
+            
+        try:
+            actual_type = DATA_TYPES[self.type][1]
+        except KeyError as e:
+            self.value = self, t.debug.deserialize(data)       
+            LOGGER.debug("unknown datatype %s for %s:", self.type, self.value)
+            self.type = 0x4c
+            return self, self.value
         self.value, data = actual_type.deserialize(data)
+        if self.type in [0x42 , 0x4c]:
+            LOGGER.debug("datatype %0a for %s", self.type, t.debug.deserialize(self.value))
         return self, data
 
 
@@ -138,7 +156,7 @@ class ReadAttributeRecord():
         r.attrid, data = int.from_bytes(data[:2], 'little'), data[2:]
         r.status, data = data[0], data[1:]
         if r.status == 0:
-            r.value, data = TypeValue.deserialize(data)
+            r.value, data = TypeValue.deserialize(data )
 
         return r, data
 
