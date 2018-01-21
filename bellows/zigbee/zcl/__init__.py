@@ -278,6 +278,10 @@ class Cluster(util.ListenableMixin, util.LocalLogMixin, metaclass=Registry):
         cfg.reportable_change = reportable_change
         return self.request(True, 0x06, schema, [cfg])
 
+    def discover_attributes(self, ptr, poll):
+        schema = foundation.COMMANDS[0x0c][1]
+        return self.request(True, 0x0c, schema, ptr,poll)
+
     def command(self, command, *args):
         schema = self.server_commands[command][1]
         return self.request(False, command, schema, *args)
