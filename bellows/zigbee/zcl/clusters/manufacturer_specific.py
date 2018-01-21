@@ -1,5 +1,4 @@
 from bellows.zigbee.zcl import Cluster
-
     
 class ManufacturerSpecificCluster(Cluster):
     cluster_id_range = (0xfc00, 0xffff)
