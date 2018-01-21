@@ -93,15 +93,17 @@ class Device(zutil.LocalLogMixin):
         return f
 
     def request(self, aps, data):
+        self.debug("send to nwk:%s -- %s ",self.nwk,aps)
         return self._application.request(self.nwk, aps, data)
 
     def handle_message(self, is_reply, aps_frame, tsn, command_id, args):
+        
         try:
-            endpoint = self.endpoints[aps_frame.destinationEndpoint]
+             endpoint = self.endpoints[aps_frame.sourceEndpoint]
         except KeyError:
             self.warn(
                 "Message on unknown endpoint %s",
-                aps_frame.destinationEndpoint,
+                aps_frame.sourceEndpoint,
             )
             return
 
