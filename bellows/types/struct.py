@@ -584,15 +584,3 @@ class EmberGpSinkListEntry(EzspStruct):
         # The short address of the target sink.
         ('sinkNodeId', named.EmberNodeId),
     ]
-class Xiaomi(EzspStruct):
-    # A sink list entry
-    _fields = [
-        ('nr', basic.uint16_t),
-        ('state', basic.uint8_t),
-        ('val1', basic.uint16_t),
-        ('val2', basic.uint16_t),
-        ('val40',basic.uint40_t),
-        ('val4', basic.uint16_t),
-        ('val5', basic.uint8_t),
-    ]
-        
