@@ -99,7 +99,7 @@ class Device(zutil.LocalLogMixin):
     def handle_message(self, is_reply, aps_frame, tsn, command_id, args):
         
         try:
-             endpoint = self.endpoints[aps_frame.sourceEndpoint]
+            endpoint = self.endpoints[aps_frame.sourceEndpoint]
         except KeyError:
             self.warn(
                 "Message on unknown endpoint %s",

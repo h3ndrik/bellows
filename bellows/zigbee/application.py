@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import logging
 import os
 
@@ -41,18 +42,26 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         c = t.EzspConfigId
         yield from self._cfg(c.CONFIG_STACK_PROFILE, 2)
         yield from self._cfg(c.CONFIG_SECURITY_LEVEL, 5)
-        yield from self._cfg(c.CONFIG_SUPPORTED_NETWORKS, 1)
+        yield from self._cfg(c.CONFIG_SUPPORTED_NETWORKS, 2)
         zdo = (
             t.EmberZdoConfigurationFlags.APP_RECEIVES_SUPPORTED_ZDO_REQUESTS |
             t.EmberZdoConfigurationFlags.APP_HANDLES_UNSUPPORTED_ZDO_REQUESTS
         )
         yield from self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
-        yield from self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
-        yield from self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
+        yield from self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2) 
         yield from self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
-        yield from self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
+        LOGGER.debug("CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True")
+        yield from self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 300, True)
         yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60 )
         yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 6 )
+        LOGGER.debug("CONFIG_ADDRESS_TABLE_SIZE, 16")
+#        yield from self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16 )
+#        yield from self._cfg(c.CONFIG_NEIGHBOR_TABLE_SIZE, 16 )
+        yield from self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 32 )
+        yield from self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32 )
+        """ 8 is default, this means 8 direct connected endpoints """
+        LOGGER.debug("CONFIG_PACKET_BUFFER_COUNT, 32")
+        yield from self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
 
     @asyncio.coroutine
     def startup(self, auto_form=False):
@@ -191,7 +200,11 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         else:
             deserialize = bellows.zigbee.zcl.deserialize
 
-        tsn, command_id, is_reply, args = deserialize(aps_frame.clusterId, message)
+        try:
+            tsn, command_id, is_reply, args = deserialize(aps_frame.clusterId, message)
+        except ValueError as e:
+            LOGGER.error("Failed to parse message (%s) on cluster %d, because %s", binascii.hexlify(message), aps_frame.clusterId, e)
+            return
 
         if is_reply:
             self._handle_reply(sender, aps_frame, tsn, command_id, args)
@@ -231,9 +244,9 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
             if dev.nwk != nwk:
                 LOGGER.debug("Device %s changed id (0x%04x => 0x%04x)", ieee, dev.nwk, nwk)
                 dev.nwk = nwk
-            elif dev.initializing or dev.status == bellows.zigbee.device.Status.ENDPOINTS_INIT:
-                LOGGER.debug("Skip initialization for existing device %s", ieee)
-                return
+#            elif dev.initializing or dev.status == bellows.zigbee.device.Status.ENDPOINTS_INIT:
+#                LOGGER.debug("Skip initialization for existing device %s", ieee)
+#                return
         else:
             dev = self.add_device(ieee, nwk)
 
@@ -311,6 +324,13 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         v = yield from self._ezsp.addTransientLinkKey(node, key)
         if v[0] != 0:
             raise Exception("Failed to set link key")
+
+        v = yield from self._ezsp.setPolicy(
+            t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
+            t.EzspDecisionId.GENERATE_NEW_TC_LINK_KEY,
+        )
+        if v[0] != 0:
+            raise Exception("Failed to change policy to allow generation of new trust center keys")
 
         return self._ezsp.permitJoining(time_s, True)
 
