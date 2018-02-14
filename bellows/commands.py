@@ -73,6 +73,7 @@ COMMANDS = {
     'setRadioPower': (0x99, (t.int8s, ), (t.EmberStatus, )),
     'setRadioChannel': (0x9A, (t.uint8_t, ), (t.EmberStatus, )),
     'setConcentrator': (0x10, (t.Bool, t.uint16_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.uint8_t), (t.EmberStatus, )),
+    'getSourceRouteTableFilledSize': (0xC2, (), (t.uint8_t, )),
     # 7. Binding Frames
     'clearBindingTable': (0x2A, (), (t.EmberStatus, )),
     'setBinding': (0x2B, (t.uint8_t, t.EmberBindingTableEntry), (t.EmberStatus, )),

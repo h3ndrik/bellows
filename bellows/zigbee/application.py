@@ -52,13 +52,13 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         yield from self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
         LOGGER.debug("CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True")
         yield from self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 300, True)
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60 )
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 6 )
+        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
+        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 11)
         LOGGER.debug("CONFIG_ADDRESS_TABLE_SIZE, 16")
-#        yield from self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16 )
-#        yield from self._cfg(c.CONFIG_NEIGHBOR_TABLE_SIZE, 16 )
-        yield from self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 32 )
-        yield from self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32 )
+        yield from self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16 )
+        yield from self._cfg(c.CONFIG_NEIGHBOR_TABLE_SIZE, 16 )
+        yield from self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 32)
+        yield from self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
         """ 8 is default, this means 8 direct connected endpoints """
         LOGGER.debug("CONFIG_PACKET_BUFFER_COUNT, 32")
         yield from self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
@@ -134,7 +134,8 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         e = self._ezsp
         v = yield from e.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
-            t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
+            t.EzspDecisionId.ALLOW_TC_KEY_REQUESTS,
+          #  t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
         )
         assert v[0] == 0  # TODO: Better check
         v = yield from e.setPolicy(
