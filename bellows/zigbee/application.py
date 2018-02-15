@@ -314,8 +314,8 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         """ create aps_frame for broadcast mgmt_permit_join"""
         aps_frame = t.EmberApsFrame()
         aps_frame.profileId = t.uint16_t(0)
-        aps_frame.clusterId =  t.uint16_t(0x36)
-        aps_frame.sourceEndpoint=  t.uint8_t(1)
+        aps_frame.clusterId =  t.uint16_t(0x0036)
+        aps_frame.sourceEndpoint=  t.uint8_t(0)
         aps_frame.destinationEndpoint =  t.uint8_t(0)
         aps_frame.options =  t.uint16_t(0x0000)
         aps_frame.groupId =  t.uint16_t(0x0010)
