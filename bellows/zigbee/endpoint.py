@@ -34,8 +34,9 @@ class Endpoint(zutil.LocalLogMixin, zutil.ListenableMixin):
         if self.status == Status.ZDO_INIT:
             return
 
-        self.info("Discovering endpoint information")
+        
         try:
+            self.info("Discovering endpoint information")
             sdr = yield from self._device.zdo.request(
                 0x0004,
                 self._device.nwk,
