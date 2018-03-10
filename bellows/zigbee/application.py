@@ -330,7 +330,7 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         return v
 
     @asyncio.coroutine
-    def zdo_send_broadcast(self, command, grpid, radius,   args):
+    def send_zdo_broadcast(self, command, grpid, radius,   args):
         """ create aps_frame for zdo broadcast"""
         aps_frame = t.EmberApsFrame()
         aps_frame.profileId = t.uint16_t(0)
