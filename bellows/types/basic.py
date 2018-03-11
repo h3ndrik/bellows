@@ -1,6 +1,3 @@
-import struct
-
-
 class int_t(int):  # noqa: N801
     _signed = True
 
@@ -83,24 +80,6 @@ class uint64_t(uint_t):  # noqa: N801
     _size = 8
 
 
-class Single(float):
-    def serialize(self):
-        return struct.pack('<f', self)
-
-    @classmethod
-    def deserialize(cls, data):
-        return struct.unpack('<f', data)[0], data[4:]
-
-
-class Double(float):
-    def serialize(self):
-        return struct.pack('<d', self)
-
-    @classmethod
-    def deserialize(cls, data):
-        return struct.unpack('<d', data)[0], data[8:]
-
-
 class LVBytes(bytes):
     def serialize(self):
         return bytes([
@@ -113,22 +92,6 @@ class LVBytes(bytes):
         s = data[1:bytes + 1]
         return s, data[bytes + 1:]
 
-class debug(bytes):
-    def serialize(self):
-        return bytes([
-            len(self),
-        ]) + self
-
-    @classmethod
-    def deserialize(cls, data):
-        l=len(data)
-        print(l)
-        if type(data) is str:
-            s = "".join("0x%02x," % ord(b) for b in data)
-        else:
-            s = "".join("0x%02x," % b for b in data)
-#        print ("%s -- %s",s, data[l + 1:])
-        return s 
 
 class _List(list):
     _length = None

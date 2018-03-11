@@ -82,10 +82,10 @@ class EZSP:
         cbid = self.add_callback(cb)
         try:
             v = yield from self._command(name, *args)
-            if v[0] != 0:
+            if v[0] != t.EmberStatus.SUCCESS:
                 raise Exception(v)
             v = yield from fut
-            if v[spos] != 0:
+            if v[spos] != t.EmberStatus.SUCCESS:
                 raise Exception(v)
         finally:
             self.remove_callback(cbid)
@@ -132,7 +132,7 @@ class EZSP:
 
         self.add_callback(cb)
         v = yield from self._command('formNetwork', parameters)
-        if v[0] != 0:
+        if v[0] != t.EmberStatus.SUCCESS:
             raise Exception("Failure forming network: %s" % (v, ))
 
         v = yield from fut
@@ -161,6 +161,12 @@ class EZSP:
                 frame_id = data[1]
                 data = data[2:]
 
+        frame_name = self.COMMANDS_BY_ID[frame_id][0]
+        LOGGER.debug(
+            "Application frame %s (%s) received",
+            frame_id,
+            frame_name,
+        )
 
         if sequence in self._awaiting:
             expected_id, schema, future = self._awaiting.pop(sequence)
@@ -175,14 +181,6 @@ class EZSP:
 
         if frame_id == 0x00:
             self.ezsp_version = result[0]
-        
-        frame_name = self.COMMANDS_BY_ID[frame_id][0]
-        LOGGER.debug(
-            "Application frame %s (%s) received: %s",
-            frame_id,
-            frame_name,
-            result,
-        )
 
     def add_callback(self, cb):
         id_ = hash(cb)

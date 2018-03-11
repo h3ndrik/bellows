@@ -73,7 +73,6 @@ COMMANDS = {
     'setRadioPower': (0x99, (t.int8s, ), (t.EmberStatus, )),
     'setRadioChannel': (0x9A, (t.uint8_t, ), (t.EmberStatus, )),
     'setConcentrator': (0x10, (t.Bool, t.uint16_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.uint8_t), (t.EmberStatus, )),
-    'getSourceRouteTableFilledSize': (0xC2, (), (t.uint8_t, )),
     # 7. Binding Frames
     'clearBindingTable': (0x2A, (), (t.EmberStatus, )),
     'setBinding': (0x2B, (t.uint8_t, t.EmberBindingTableEntry), (t.EmberStatus, )),
@@ -101,7 +100,7 @@ COMMANDS = {
     # TODO: LVBytes in incomingRouteRecordHandler is really a list of
     #       uint16_t - decoding this frame will be incorrect, since the length
     #       refers to the number of items in the list
-    'incomingRouteRecordHandler': (0x59, (), (t.EmberNodeId, t.EmberEUI64, t.uint8_t, t.int8s, t.LVList(t.EmberNodeId))),
+    'incomingRouteRecordHandler': (0x59, (), (t.EmberNodeId, t.EmberEUI64, t.uint8_t, t.int8s, t.LVBytes)),
     'changeSourceRouteHandler': (0xC4, (), (t.EmberNodeId, t.EmberNodeId, t.Bool)),
     # TODO: LVBytes in setSourceRoute is really a list of uint16_t,
     #       serializing the frame will produce something the NCP will fail

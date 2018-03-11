@@ -3,33 +3,24 @@ import binascii
 import logging
 import os
 
+from zigpy.exceptions import DeliveryError
+import zigpy.application
+import zigpy.device
+import zigpy.util
+
 import bellows.types as t
-import bellows.zigbee.appdb
-import bellows.zigbee.device
 import bellows.zigbee.util
-import bellows.zigbee.zcl
-import bellows.zigbee.zdo
-from bellows.zigbee.exceptions import DeliveryError
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ControllerApplication(bellows.zigbee.util.ListenableMixin):
+class ControllerApplication(zigpy.application.ControllerApplication):
     direct = t.EmberOutgoingMessageType.OUTGOING_DIRECT
 
     def __init__(self, ezsp, database_file=None):
-        self._send_sequence = 0
+        super().__init__(database_file=database_file)
         self._ezsp = ezsp
-        self.devices = {}
         self._pending = {}
-        self._listeners = {}
-        self._ieee = None
-        self._nwk = None
-
-        if database_file is not None:
-            self._dblistener = bellows.zigbee.appdb.PersistingListener(database_file, self)
-            self.add_listener(self._dblistener)
-            self._dblistener.load()
 
     @asyncio.coroutine
     def initialize(self):
@@ -42,30 +33,18 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         c = t.EzspConfigId
         yield from self._cfg(c.CONFIG_STACK_PROFILE, 2)
         yield from self._cfg(c.CONFIG_SECURITY_LEVEL, 5)
-        yield from self._cfg(c.CONFIG_SUPPORTED_NETWORKS, 2)
+        yield from self._cfg(c.CONFIG_SUPPORTED_NETWORKS, 1)
         zdo = (
             t.EmberZdoConfigurationFlags.APP_RECEIVES_SUPPORTED_ZDO_REQUESTS |
             t.EmberZdoConfigurationFlags.APP_HANDLES_UNSUPPORTED_ZDO_REQUESTS
         )
         yield from self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
-        yield from self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2) 
-        yield from self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
-        yield from self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 300, True)
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 11)
-        v = yield from self._cfg_read(c.CONFIG_ADDRESS_TABLE_SIZE)
-        LOGGER.debug("default CONFIG_ADDRESS_TABLE_SIZE: %s", v)
-        yield from self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16 )
-        v = yield from self._cfg_read(c.CONFIG_NEIGHBOR_TABLE_SIZE)
-        LOGGER.debug("default c.CONFIG_NEIGHBOR_TABLE_SIZE: %s", v)
-        yield from self._cfg(c.CONFIG_NEIGHBOR_TABLE_SIZE, 8 )
-        v = yield from self._cfg_read(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE)
-        LOGGER.debug("default c.CONFIG_SOURCE_ROUTE_TABLE_SIZE: %s", v)
-        yield from self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 16)
-        v = yield from self._cfg_read(c.CONFIG_MAX_END_DEVICE_CHILDREN)
-        LOGGER.debug("default c.CONFIG_MAX_END_DEVICE_CHILDREN: %s", v)
-        yield from self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
+        yield from self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
         yield from self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
+        yield from self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
+        yield from self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
+        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
+        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 6)
 
     @asyncio.coroutine
     def startup(self, auto_form=False):
@@ -74,13 +53,13 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         e = self._ezsp
 
         v = yield from e.networkInit()
-        if v[0] != 0:
+        if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
                 raise Exception("Could not initialize network")
             yield from self.form_network()
 
         v = yield from e.getNetworkParameters()
-        assert v[0] == 0  # TODO: Better check
+        assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         if v[1] != t.EmberNodeType.COORDINATOR:
             if not auto_form:
                 raise Exception("Network not configured as coordinator")
@@ -111,7 +90,7 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
 
         initial_security_state = bellows.zigbee.util.zha_security(controller=True)
         v = yield from self._ezsp.setInitialSecurityState(initial_security_state)
-        assert v[0] == 0  # TODO: Better check
+        assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
         parameters = t.EmberNetworkParameters()
         parameters.panId = pan_id
@@ -130,13 +109,7 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
     def _cfg(self, config_id, value, optional=False):
         v = yield from self._ezsp.setConfigurationValue(config_id, value)
         if not optional:
-            assert v[0] == 0  # TODO: Better check
-            
-    @asyncio.coroutine
-    def _cfg_read(self,  config_id):
-        v = yield from self._ezsp.getConfigurationValue(config_id)
-        assert v[0] == 0  # TODO: Better check
-        return(v[1])
+            assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
     @asyncio.coroutine
     def _policy(self):
@@ -144,61 +117,39 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         e = self._ezsp
         v = yield from e.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
-            t.EzspDecisionId.ALLOW_TC_KEY_REQUESTS,
-          #  t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
+            t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
         )
-        assert v[0] == 0  # TODO: Better check
+        assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         v = yield from e.setPolicy(
             t.EzspPolicyId.APP_KEY_REQUEST_POLICY,
             t.EzspDecisionId.ALLOW_APP_KEY_REQUESTS,
         )
-        assert v[0] == 0  # TODO: Better check
+        assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         v = yield from e.setPolicy(
             t.EzspPolicyId.TRUST_CENTER_POLICY,
             t.EzspDecisionId.ALLOW_PRECONFIGURED_KEY_JOINS,
         )
-        assert v[0] == 0  # TODO: Better check
-
-    def add_device(self, ieee, nwk):
-        assert isinstance(ieee, t.EmberEUI64)
-        # TODO: Shut down existing device
-        dev = bellows.zigbee.device.Device(self, ieee, nwk)
-        self.devices[ieee] = dev
-        return dev
+        assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
     @asyncio.coroutine
-    def remove(self, ieee):
-        assert isinstance(ieee, t.EmberEUI64)
-        dev = self.devices.pop(ieee, None)
-        if not dev:
-            LOGGER.debug("Device not found for removal: %s", ieee)
-            return
-        LOGGER.info("Removing device 0x%04x (%s)", dev.nwk, ieee)
-        zdo_worked = False
-        try:
-            resp = yield from dev.zdo.leave()
-            zdo_worked = resp[0] == 0
-        except Exception:
-            pass
-        if not zdo_worked:
-            # This should probably be delivered to the parent device instead
-            # of the device itself.
-            yield from self._ezsp.removeDevice(dev.nwk, dev.ieee, dev.ieee)
-        self.listener_event('device_removed', dev)
+    def force_remove(self, dev):
+        # This should probably be delivered to the parent device instead
+        # of the device itself.
+        yield from self._ezsp.removeDevice(dev.nwk, dev.ieee, dev.ieee)
 
     def ezsp_callback_handler(self, frame_name, args):
         if frame_name == 'incomingMessageHandler':
             self._handle_frame(*args)
         elif frame_name == 'messageSentHandler':
-            if args[4] != 0:
+            if args[4] != t.EmberStatus.SUCCESS:
                 self._handle_frame_failure(*args)
             else:
                 self._handle_frame_sent(*args)
         elif frame_name == 'trustCenterJoinHandler':
             if args[2] == t.EmberDeviceUpdate.DEVICE_LEFT:
-                self._handle_leave(*args)
+                self.handle_leave(args[0], args[1])
             else:
-                self._handle_join(*args)
+                self.handle_join(args[0], args[1], args[4])
 
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:
@@ -207,9 +158,9 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
             LOGGER.debug("No such device %s", sender)
 
         if aps_frame.destinationEndpoint == 0:
-            deserialize = bellows.zigbee.zdo.deserialize
+            deserialize = zigpy.zdo.deserialize
         else:
-            deserialize = bellows.zigbee.zcl.deserialize
+            deserialize = zigpy.zcl.deserialize
 
         try:
             tsn, command_id, is_reply, args = deserialize(aps_frame.clusterId, message)
@@ -220,7 +171,7 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         if is_reply:
             self._handle_reply(sender, aps_frame, tsn, command_id, args)
         else:
-            self._handle_message(False, sender, aps_frame, tsn, command_id, args)
+            self.handle_message(False, sender, aps_frame.profileId, aps_frame.clusterId, aps_frame.sourceEndpoint, aps_frame.destinationEndpoint, tsn, command_id, args)
 
     def _handle_reply(self, sender, aps_frame, tsn, command_id, args):
         try:
@@ -231,44 +182,13 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
                 reply_fut.set_result(args)
             return
         except KeyError:
-            LOGGER.warning("Unexpected response from 0x%04x: TSN=%s command=%s args=%s",sender ,  tsn, command_id, args)
+            LOGGER.warning("Unexpected response TSN=%s command=%s args=%s", tsn, command_id, args)
         except asyncio.futures.InvalidStateError as exc:
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
             # We've already handled, don't drop through to device handler
             return
 
-        self._handle_message(True, sender, aps_frame, tsn, command_id, args)
-
-    def _handle_message(self, is_reply, sender, aps_frame, tsn, command_id, args):
-        try:
-            device = self.get_device(nwk=sender)
-        except KeyError:
-            LOGGER.warning("Message on unknown device 0x%04x", sender)
-            return
-
-        return device.handle_message(is_reply, aps_frame, tsn, command_id, args)
-
-    def _handle_join(self, nwk, ieee, device_update, join_dec, parent_nwk):
-        LOGGER.info("Device 0x%04x (%s) joined the network", nwk, ieee)
-        if ieee in self.devices:
-            dev = self.get_device(ieee)
-            if dev.nwk != nwk:
-                LOGGER.debug("Device %s changed id (0x%04x => 0x%04x)", ieee, dev.nwk, nwk)
-                dev.nwk = nwk
-            elif dev.initializing or dev.status == bellows.zigbee.device.Status.ENDPOINTS_INIT:
-                LOGGER.debug("Skip initialization for existing device %s", ieee)
-                return
-        else:
-            dev = self.add_device(ieee, nwk)
-
-        self.listener_event('device_joined', dev)
-        dev.schedule_initialize()
-
-    def _handle_leave(self, nwk, ieee, *args):
-        LOGGER.info("Device 0x%04x (%s) left the network", nwk, ieee)
-        dev = self.devices.get(ieee, None)
-        if dev is not None:
-            self.listener_event('device_left', dev)
+        self.handle_message(True, sender, aps_frame.profileId, aps_frame.clusterId, aps_frame.sourceEndpoint, aps_frame.destinationEndpoint, tsn, command_id, args)
 
     def _handle_frame_failure(self, message_type, destination, aps_frame, message_tag, status, message):
         try:
@@ -292,109 +212,66 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         except KeyError:
             LOGGER.warning("Unexpected message send notification")
         except asyncio.futures.InvalidStateError as exc:
-           LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
+            LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
 
-    @bellows.zigbee.util.retryable_request
+    @zigpy.util.retryable_request
     @asyncio.coroutine
-    def request(self, nwk, aps_frame, data, expect_reply=True, timeout=10):
-        seq = aps_frame.sequence
-        assert seq not in self._pending
+    def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
+        assert sequence not in self._pending
         send_fut = asyncio.Future()
         reply_fut = None
         if expect_reply:
             reply_fut = asyncio.Future()
-        self._pending[seq] = (send_fut, reply_fut)
+        self._pending[sequence] = (send_fut, reply_fut)
 
-        v = yield from self._ezsp.sendUnicast(self.direct, nwk, aps_frame, seq, data)
-        if v[0] != 0:
-            self._pending.pop(seq)
+        aps_frame = t.EmberApsFrame()
+        aps_frame.profileId = t.uint16_t(profile)
+        aps_frame.clusterId = t.uint16_t(cluster)
+        aps_frame.sourceEndpoint = t.uint8_t(src_ep)
+        aps_frame.destinationEndpoint = t.uint8_t(dst_ep)
+        aps_frame.options = t.EmberApsOption(
+            t.EmberApsOption.APS_OPTION_RETRY |
+            t.EmberApsOption.APS_OPTION_ENABLE_ROUTE_DISCOVERY
+        )
+        aps_frame.groupId = t.uint16_t(0)
+        aps_frame.sequence = t.uint8_t(sequence)
+
+        v = yield from self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data)
+        if v[0] != t.EmberStatus.SUCCESS:
+            self._pending.pop(sequence)
             send_fut.cancel()
             if expect_reply:
                 reply_fut.cancel()
             raise DeliveryError("Message send failure %s" % (v[0], ))
 
         # Wait for messageSentHandler message
-        #v = yield from send_fut
-        #if expect_reply:
-        #    # Wait for reply
-        #    v = yield from asyncio.wait_for(reply_fut, timeout)
-        #return v
+        v = yield from send_fut
         if expect_reply:
-            done,  pend = yield from asyncio.wait([send_fut, reply_fut],  timeout=timeout,  return_when='FIRST_COMPLETED')
-            if send_fut in done:
-                v = yield from asyncio.wait_for(reply_fut, timeout)
-            if reply_fut in done:
-                v = reply_fut.result()
-        else:
-            v = yield from send_fut
+            # Wait for reply
+            v = yield from asyncio.wait_for(reply_fut, timeout)
         return v
 
-    @asyncio.coroutine
-    def send_zdo_broadcast(self, command, grpid, radius,   args):
-        """ create aps_frame for zdo broadcast"""
-        aps_frame = t.EmberApsFrame()
-        aps_frame.profileId = t.uint16_t(0)
-        aps_frame.clusterId =  t.uint16_t(command)
-        aps_frame.sourceEndpoint=  t.uint8_t(0)
-        aps_frame.destinationEndpoint =  t.uint8_t(0)
-        aps_frame.options =  t.uint16_t(0x0000) # no options
-        aps_frame.groupId =  t.uint16_t(grpid)
-        aps_frame.sequence = t.uint8_t(self.get_sequence())
-        radius=t.uint8_t(radius)
-        data= aps_frame.sequence.to_bytes(1, 'little')
-        schema =  bellows.zigbee.zdo.types.CLUSTERS[command][2]
-        data += t.serialize(args, schema)
-        LOGGER.debug("broadcast: %s - %s", aps_frame, data)
-        yield from self._ezsp.sendBroadcast( 0xfffd , aps_frame, radius , len(data), data)
-        
     def permit(self, time_s=60):
         assert 0 <= time_s <= 254
-        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s,0])
         return self._ezsp.permitJoining(time_s)
 
     def permit_with_key(self, node, code, time_s=60):
         if type(node) is not t.EmberEUI64:
             node = t.EmberEUI64([t.uint8_t(p) for p in node])
 
-        key = bellows.zigbee.util.convert_install_code(code)
+        key = zigpy.util.convert_install_code(code)
         if key is None:
             raise Exception("Invalid install code")
 
         v = yield from self._ezsp.addTransientLinkKey(node, key)
-        if v[0] != 0:
+        if v[0] != t.EmberStatus.SUCCESS:
             raise Exception("Failed to set link key")
 
         v = yield from self._ezsp.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
             t.EzspDecisionId.GENERATE_NEW_TC_LINK_KEY,
         )
-        if v[0] != 0:
+        if v[0] != t.EmberStatus.SUCCESS:
             raise Exception("Failed to change policy to allow generation of new trust center keys")
-        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s,0])
+
         return self._ezsp.permitJoining(time_s, True)
-
-    def get_sequence(self):
-        while True:    
-            self._send_sequence = (self._send_sequence + 1) % 256
-            if not self._send_sequence in self._pending:
-                break
-        return self._send_sequence
-
-    def get_device(self, ieee=None, nwk=None):
-        if ieee is not None:
-            return self.devices[ieee]
-
-        for dev in self.devices.values():
-            # TODO: Make this not terrible
-            if dev.nwk == nwk:
-                return dev
-
-        raise KeyError
-
-    @property
-    def ieee(self):
-        return self._ieee
-
-    @property
-    def nwk(self):
-        return self._nwk
