@@ -50,17 +50,21 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         yield from self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
         yield from self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2) 
         yield from self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
-        LOGGER.debug("CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True")
         yield from self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 300, True)
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60 )
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 6 )
-        LOGGER.debug("CONFIG_ADDRESS_TABLE_SIZE, 16")
-#        yield from self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16 )
-#        yield from self._cfg(c.CONFIG_NEIGHBOR_TABLE_SIZE, 16 )
-        yield from self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 32 )
-        yield from self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32 )
-        """ 8 is default, this means 8 direct connected endpoints """
-        LOGGER.debug("CONFIG_PACKET_BUFFER_COUNT, 32")
+        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
+        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 11)
+        v = yield from self._cfg_read(c.CONFIG_ADDRESS_TABLE_SIZE)
+        LOGGER.debug("default CONFIG_ADDRESS_TABLE_SIZE: %s", v)
+        yield from self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16 )
+        v = yield from self._cfg_read(c.CONFIG_NEIGHBOR_TABLE_SIZE)
+        LOGGER.debug("default c.CONFIG_NEIGHBOR_TABLE_SIZE: %s", v)
+        yield from self._cfg(c.CONFIG_NEIGHBOR_TABLE_SIZE, 8 )
+        v = yield from self._cfg_read(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE)
+        LOGGER.debug("default c.CONFIG_SOURCE_ROUTE_TABLE_SIZE: %s", v)
+        yield from self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 16)
+        v = yield from self._cfg_read(c.CONFIG_MAX_END_DEVICE_CHILDREN)
+        LOGGER.debug("default c.CONFIG_MAX_END_DEVICE_CHILDREN: %s", v)
+        yield from self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
         yield from self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
 
     @asyncio.coroutine
@@ -127,6 +131,12 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         v = yield from self._ezsp.setConfigurationValue(config_id, value)
         if not optional:
             assert v[0] == 0  # TODO: Better check
+            
+    @asyncio.coroutine
+    def _cfg_read(self,  config_id):
+        v = yield from self._ezsp.getConfigurationValue(config_id)
+        assert v[0] == 0  # TODO: Better check
+        return(v[1])
 
     @asyncio.coroutine
     def _policy(self):
@@ -134,7 +144,8 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         e = self._ezsp
         v = yield from e.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
-            t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
+            t.EzspDecisionId.ALLOW_TC_KEY_REQUESTS,
+          #  t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
         )
         assert v[0] == 0  # TODO: Better check
         v = yield from e.setPolicy(
@@ -220,7 +231,7 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
                 reply_fut.set_result(args)
             return
         except KeyError:
-            LOGGER.warning("Unexpected response TSN=%s command=%s args=%s", tsn, command_id, args)
+            LOGGER.warning("Unexpected response from 0x%04x: TSN=%s command=%s args=%s",sender ,  tsn, command_id, args)
         except asyncio.futures.InvalidStateError as exc:
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
             # We've already handled, don't drop through to device handler
@@ -244,9 +255,9 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
             if dev.nwk != nwk:
                 LOGGER.debug("Device %s changed id (0x%04x => 0x%04x)", ieee, dev.nwk, nwk)
                 dev.nwk = nwk
-#            elif dev.initializing or dev.status == bellows.zigbee.device.Status.ENDPOINTS_INIT:
-#                LOGGER.debug("Skip initialization for existing device %s", ieee)
-#                return
+            elif dev.initializing or dev.status == bellows.zigbee.device.Status.ENDPOINTS_INIT:
+                LOGGER.debug("Skip initialization for existing device %s", ieee)
+                return
         else:
             dev = self.add_device(ieee, nwk)
 
@@ -281,7 +292,7 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         except KeyError:
             LOGGER.warning("Unexpected message send notification")
         except asyncio.futures.InvalidStateError as exc:
-            LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
+           LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
 
     @bellows.zigbee.util.retryable_request
     @asyncio.coroutine
@@ -303,14 +314,42 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
             raise DeliveryError("Message send failure %s" % (v[0], ))
 
         # Wait for messageSentHandler message
-        v = yield from send_fut
+        #v = yield from send_fut
+        #if expect_reply:
+        #    # Wait for reply
+        #    v = yield from asyncio.wait_for(reply_fut, timeout)
+        #return v
         if expect_reply:
-            # Wait for reply
-            v = yield from asyncio.wait_for(reply_fut, timeout)
+            done,  pend = yield from asyncio.wait([send_fut, reply_fut],  timeout=timeout,  return_when='FIRST_COMPLETED')
+            if send_fut in done:
+                v = yield from asyncio.wait_for(reply_fut, timeout)
+            if reply_fut in done:
+                v = reply_fut.result()
+        else:
+            v = yield from send_fut
         return v
 
+    @asyncio.coroutine
+    def send_zdo_broadcast(self, command, grpid, radius,   args):
+        """ create aps_frame for zdo broadcast"""
+        aps_frame = t.EmberApsFrame()
+        aps_frame.profileId = t.uint16_t(0)
+        aps_frame.clusterId =  t.uint16_t(command)
+        aps_frame.sourceEndpoint=  t.uint8_t(0)
+        aps_frame.destinationEndpoint =  t.uint8_t(0)
+        aps_frame.options =  t.uint16_t(0x0000) # no options
+        aps_frame.groupId =  t.uint16_t(grpid)
+        aps_frame.sequence = t.uint8_t(self.get_sequence())
+        radius=t.uint8_t(radius)
+        data= aps_frame.sequence.to_bytes(1, 'little')
+        schema =  bellows.zigbee.zdo.types.CLUSTERS[command][2]
+        data += t.serialize(args, schema)
+        LOGGER.debug("broadcast: %s - %s", aps_frame, data)
+        yield from self._ezsp.sendBroadcast( 0xfffd , aps_frame, radius , len(data), data)
+        
     def permit(self, time_s=60):
         assert 0 <= time_s <= 254
+        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s,0])
         return self._ezsp.permitJoining(time_s)
 
     def permit_with_key(self, node, code, time_s=60):
@@ -331,11 +370,14 @@ class ControllerApplication(bellows.zigbee.util.ListenableMixin):
         )
         if v[0] != 0:
             raise Exception("Failed to change policy to allow generation of new trust center keys")
-
+        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s,0])
         return self._ezsp.permitJoining(time_s, True)
 
     def get_sequence(self):
-        self._send_sequence = (self._send_sequence + 1) % 256
+        while True:    
+            self._send_sequence = (self._send_sequence + 1) % 256
+            if not self._send_sequence in self._pending:
+                break
         return self._send_sequence
 
     def get_device(self, ieee=None, nwk=None):
