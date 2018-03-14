@@ -220,8 +220,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
 
     @zigpy.util.retryable_request
-    @asyncio.coroutine
-    def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
+    async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
         assert sequence not in self._pending
         send_fut = asyncio.Future()
         reply_fut = None
@@ -241,7 +240,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         aps_frame.groupId = t.uint16_t(0)
         aps_frame.sequence = t.uint8_t(sequence)
 
-        v = yield from self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data)
+        v = await self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data)
         if v[0] != t.EmberStatus.SUCCESS:
             self._pending.pop(sequence)
             send_fut.cancel()
@@ -249,12 +248,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 reply_fut.cancel()
             raise DeliveryError("Message send failure %s" % (v[0], ))
 
-        # Wait for messageSentHandler message
-        v = yield from send_fut
         if expect_reply:
-            # Wait for reply
-            v = yield from asyncio.wait_for(reply_fut, timeout)
+            done,  pend = await asyncio.wait([send_fut, reply_fut],  timeout=timeout,  return_when='FIRST_COMPLETED')
+            if send_fut in done:
+                v = await asyncio.wait_for(reply_fut, timeout)
+            if reply_fut in done:
+                v = reply_fut.result()
+        else:
+            v = await send_fut
         return v
+
 
     def permit(self, time_s=60):
         assert 0 <= time_s <= 254
