@@ -108,6 +108,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         yield from self._ezsp.formNetwork(parameters)
         yield from self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1)
+        yield from self._ezsp.setConcentrator(bool(1),t.EmberConcentratorType.HIGH_RAM_CONCENTRATOR, t.uint_16(30), t.uint_16(1800), t.uint_8(3), t.uint_8(3), t.uint_8(0))
 
     @asyncio.coroutine
     def _cfg(self, config_id, value, optional=False):
