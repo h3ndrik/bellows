@@ -80,6 +80,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._ieee = ieee[0]
 
         e.add_callback(self.ezsp_callback_handler)
+        
+        self._read_multicast_table()
 
     @asyncio.coroutine
     def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
@@ -306,3 +308,33 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         data += t.serialize(args, schema)
         LOGGER.debug("zdo-broadcast: %s - %s", aps_frame, data)
         yield from self._ezsp.sendBroadcast( 0xfffd , aps_frame, radius , len(data), data)
+    
+    async def subscribe_group(self, group_id):
+        # check if already subscribed, if not find a free entry and subscribe group_id
+        # return 1 success, 2 already suscribed,0 failure
+        pass
+        
+    async def unsubscribe_group(self,  group_id):
+        # check if subscribed and then remove
+        # return 1 success, 2 not exist, 0 failure
+        pass
+        
+    async def _read_multicast_table(self):
+        # initialize copy of multicast_table, keep a copy in memory to speed up r/w
+        e = self._ezsp
+        entry_id = 0
+        while True:
+            (state, MulticastTableEntry) = await e.getMulticastTableEntry(entry_id)
+            LOGGER.debug("read multicast entry %s status %s: %s", entry_id, state, MulticastTableEntry)
+            if state == t.EmberStatus.SUCCESS:
+                self._multicast_table[entry_id] = MulticastTableEntry
+            elif state == t.EmberStatus.INDEX_OUT_OF_RANGE:
+                break
+            entry_id += 1
+            if entry_id == 16: break # testing, just stop
+            
+    async def _write_multicast_table(self):
+        # write copy to NCP
+        pass
+    
+    
