@@ -81,7 +81,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         e.add_callback(self.ezsp_callback_handler)
         
-        self._read_multicast_table()
+        yield from self._read_multicast_table()
 
     @asyncio.coroutine
     def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
