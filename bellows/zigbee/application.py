@@ -315,19 +315,21 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         # return 0 success, 0 already suscribed,1 failure or ember state
         e = self._ezsp
         index=None
+        state=1
         for entry_id in self._multicast_table.keys:
             if self._multicast_table[entry_id].multicastId == group_id:
-                return 0
+                return 
             if self._multicast_table[entry_id].endpoint == 0:
                 index = entry_id
         if index is None:
             LOGGER.critical("multicast table full,  can not add %s",  group_id)
-            return 1
+            return 
         self._multicast_table[index].endpoint = 1
         self._multicast_table[index].multicastId = group_id
-        state = await e.setMulticastTableEntry(index, self._multicast_table[index])
         LOGGER.debug("multicast group subscrribed %s: %s",  group_id,  state)
-        return state
+
+        state = await e.setMulticastTableEntry(index, self._multicast_table[index])
+        return
         
     async def unsubscribe_group(self,  group_id):
         # check if subscribed and then remove
