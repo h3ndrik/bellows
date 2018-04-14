@@ -22,6 +22,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         super().__init__(database_file=database_file)
         self._ezsp = ezsp
         self._pending = {}
+        self._multicast_table = {}
 
     @asyncio.coroutine
     def initialize(self):
