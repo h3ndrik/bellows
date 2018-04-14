@@ -311,13 +311,33 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     
     async def subscribe_group(self, group_id):
         # check if already subscribed, if not find a free entry and subscribe group_id
-        # return 1 success, 2 already suscribed,0 failure
-        pass
-        
+        # return 0 success, 0 already suscribed,1 failure or ember state
+        e = self._ezsp
+        index=None
+        for entry_id in self._multicast_table.keys:
+            if self._multicast_table[entry_id].multicastId == group_id:
+                return 0
+            if self._multicast_table[entry_id].endpoint == 0:
+                index = entry_id
+        if index is None:
+            LOGGER.critical("multicast table full,  can not add %s",  group_id)
+            return 1
+        self._multicast_table[index].endpoint = 1
+        self._multicast_table[index].multicastId = group_id
+        state = await e.setMulticastTableEntry(index, self._multicast_table[index])
+        LOGGER.debug("multicast group subscrribed %s: %s",  group_id,  state)
+        return state
     async def unsubscribe_group(self,  group_id):
         # check if subscribed and then remove
-        # return 1 success, 2 not exist, 0 failure
-        pass
+        # return 0 success, 2 not exist, 
+        e = self._ezsp
+        state = 2
+        for entry_id in self._multicast_table.keys:
+            if self._multicast_table[entry_id].multicastId == group_id:
+                self._multicast_table[entry_id].endpoint = 0
+                self._multicast_table[entry_id].multicastId = group_id
+                state = await e.setMulticastTableEntry(entry_id, self._multicast_table[entry_id])
+        return state
         
     async def _read_multicast_table(self):
         # initialize copy of multicast_table, keep a copy in memory to speed up r/w
@@ -328,10 +348,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.debug("read multicast entry %s status %s: %s", entry_id, state, MulticastTableEntry)
             if state == t.EmberStatus.SUCCESS:
                 self._multicast_table[entry_id] = MulticastTableEntry
-            elif state == t.EmberStatus.INDEX_OUT_OF_RANGE:
+#                if MulticastTableEntry.endpoint:
+#                    self._multicast_table["grp_index"][MulticastTableEntry.multicastId] = entry_id
+            else:
                 break
             entry_id += 1
-            if entry_id == 16: break # testing, just stop
+           
             
     async def _write_multicast_table(self):
         # write copy to NCP
