@@ -327,6 +327,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         state = await e.setMulticastTableEntry(index, self._multicast_table[index])
         LOGGER.debug("multicast group subscrribed %s: %s",  group_id,  state)
         return state
+        
     async def unsubscribe_group(self,  group_id):
         # check if subscribed and then remove
         # return 0 success, 2 not exist, 
