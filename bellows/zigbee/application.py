@@ -81,7 +81,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._ieee = ieee[0]
 
         e.add_callback(self.ezsp_callback_handler)
-        
+
         yield from self._read_multicast_table()
 
     @asyncio.coroutine
@@ -309,40 +309,44 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         data += t.serialize(args, schema)
         LOGGER.debug("zdo-broadcast: %s - %s", aps_frame, data)
         yield from self._ezsp.sendBroadcast( 0xfffd , aps_frame, radius , len(data), data)
-    
+
     async def subscribe_group(self, group_id):
         # check if already subscribed, if not find a free entry and subscribe group_id
         # return 0 success, 0 already suscribed,1 failure or ember state
+        LOGGER.debug("multicast group subscribe call  %s",  group_id)
+
         e = self._ezsp
         index=None
-        state=1
-        for entry_id in self._multicast_table.keys:
+        for entry_id in self._multicast_table.keys():
+            
+#            LOGGER.debug("multicast table [%s/%s/%s]", entry_id,  self._multicast_table[entry_id].multicastId, 
+#                        self._multicast_table[entry_id].endpoint
+#                        )
             if self._multicast_table[entry_id].multicastId == group_id:
+                LOGGER.debug("multicast group %s already subscribed", group_id)
                 return 
             if self._multicast_table[entry_id].endpoint == 0:
                 index = entry_id
         if index is None:
             LOGGER.critical("multicast table full,  can not add %s",  group_id)
             return 
-        self._multicast_table[index].endpoint = 1
-        self._multicast_table[index].multicastId = group_id
-        LOGGER.debug("multicast group subscrribed %s: %s",  group_id,  state)
+        self._multicast_table[index].endpoint = t.uint8_t(1)
+        self._multicast_table[index].multicastId = t.EmberMulticastId(group_id)
+        result = await e.setMulticastTableEntry(t.uint8_t(index), self._multicast_table[index])
+        LOGGER.debug("multicast group subscribed success")
 
-        state = await e.setMulticastTableEntry(index, self._multicast_table[index])
-        return
-        
     async def unsubscribe_group(self,  group_id):
         # check if subscribed and then remove
         # return 0 success, 2 not exist, 
         e = self._ezsp
         state = 2
-        for entry_id in self._multicast_table.keys:
+        for entry_id in self._multicast_table.keys():
             if self._multicast_table[entry_id].multicastId == group_id:
                 self._multicast_table[entry_id].endpoint = 0
                 self._multicast_table[entry_id].multicastId = group_id
-                state = await e.setMulticastTableEntry(entry_id, self._multicast_table[entry_id])
+                (state, ) = await e.setMulticastTableEntry([entry_id, self._multicast_table[entry_id]])
         return state
-        
+
     async def _read_multicast_table(self):
         # initialize copy of multicast_table, keep a copy in memory to speed up r/w
         e = self._ezsp
@@ -357,10 +361,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             else:
                 break
             entry_id += 1
-           
-            
+
+
     async def _write_multicast_table(self):
         # write copy to NCP
         pass
-    
-    
+
+
