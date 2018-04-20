@@ -111,7 +111,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         yield from self._ezsp.formNetwork(parameters)
         yield from self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1)
-        yield from self._ezsp.setConcentrator(bool(1),t.EmberConcentratorType.HIGH_RAM_CONCENTRATOR, t.uint_16(30), t.uint_16(1800), t.uint_8(3), t.uint_8(3), t.uint_8(0))
+#        yield from self._ezsp.setConcentrator(bool(1),t.EmberConcentratorType.HIGH_RAM_CONCENTRATOR, t.uint_16(30), t.uint_16(1800), t.uint_8(3), t.uint_8(3), t.uint_8(0))
 
     @asyncio.coroutine
     def _cfg(self, config_id, value, optional=False):
@@ -202,8 +202,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         try:
             send_fut, reply_fut = self._pending.pop(message_tag)
             send_fut.set_exception(DeliveryError("Message send failure: %s" % (status, )))
-            if reply_fut:
-                reply_fut.cancel()
+#            if reply_fut:
+#                reply_fut.cancel()
         except KeyError:
             LOGGER.warning("Unexpected message send failure")
         except asyncio.futures.InvalidStateError as exc:
@@ -252,7 +252,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             raise DeliveryError("Message send failure %s" % (v[0], ))
 
         if expect_reply:
-            done,  pend = await asyncio.wait([send_fut, reply_fut],  timeout=timeout,  return_when='FIRST_COMPLETED')
+            done, pend = await asyncio.wait(
+                [send_fut, reply_fut],
+                timeout=timeout,
+                return_when='FIRST_COMPLETED')
             if send_fut in done:
                 v = await asyncio.wait_for(reply_fut, timeout)
             if reply_fut in done:
@@ -261,11 +264,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             v = await send_fut
         return v
 
-
     def permit(self, time_s=60):
         assert 0 <= time_s <= 254
         """ send mgmt-permit-join to all router """
-        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s,0])
+        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s, 0])
         return self._ezsp.permitJoining(time_s)
 
     def permit_with_key(self, node, code, time_s=60):
@@ -287,57 +289,50 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if v[0] != t.EmberStatus.SUCCESS:
             raise Exception("Failed to change policy to allow generation of new trust center keys")
         """ send mgmt-permit-join to all router """
-        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s,0])
+        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s, 0])
         return self._ezsp.permitJoining(time_s, True)
 
     @asyncio.coroutine
-    def send_zdo_broadcast(self, command, grpid, radius,   args):
+    def send_zdo_broadcast(self, command, grpid, radius, args):
         """ create aps_frame for zdo broadcast"""
         aps_frame = t.EmberApsFrame()
-        aps_frame.profileId = t.uint16_t(0x0000) # 0 for zdo
-        aps_frame.clusterId =  t.uint16_t(command)
-        aps_frame.sourceEndpoint=  t.uint8_t(0) # endpoint 0x00 for zdo
-        aps_frame.destinationEndpoint =  t.uint8_t(0) # endpoint 0x00 for zdo
+        aps_frame.profileId = t.uint16_t(0x0000)        # 0 for zdo
+        aps_frame.clusterId = t.uint16_t(command)
+        aps_frame.sourceEndpoint = t.uint8_t(0)         # endpoint 0x00 for zdo
+        aps_frame.destinationEndpoint = t.uint8_t(0)   # endpoint 0x00 for zdo
         aps_frame.options = t.EmberApsOption(
-            t.EmberApsOption.APS_OPTION_NONE 
+            t.EmberApsOption.APS_OPTION_NONE
         )
-        aps_frame.groupId =  t.uint16_t(grpid)
+        aps_frame.groupId = t.uint16_t(grpid)
         aps_frame.sequence = t.uint8_t(self.get_sequence())
-        radius=t.uint8_t(radius)
-        data= aps_frame.sequence.to_bytes(1, 'little')
-        schema =  zigpy.zdo.types.CLUSTERS[command][2]
+        radius = t.uint8_t(radius)
+        data = aps_frame.sequence.to_bytes(1, 'little')
+        schema = zigpy.zdo.types.CLUSTERS[command][2]
         data += t.serialize(args, schema)
         LOGGER.debug("zdo-broadcast: %s - %s", aps_frame, data)
-        yield from self._ezsp.sendBroadcast( 0xfffd , aps_frame, radius , len(data), data)
+        yield from self._ezsp.sendBroadcast(0xfffd, aps_frame, radius, len(data), data)
 
     async def subscribe_group(self, group_id):
         # check if already subscribed, if not find a free entry and subscribe group_id
-        # return 0 success, 0 already suscribed,1 failure or ember state
-        LOGGER.debug("multicast group subscribe call  %s",  group_id)
 
         e = self._ezsp
-        index=None
+        index = None
         for entry_id in self._multicast_table.keys():
-            
-#            LOGGER.debug("multicast table [%s/%s/%s]", entry_id,  self._multicast_table[entry_id].multicastId, 
-#                        self._multicast_table[entry_id].endpoint
-#                        )
             if self._multicast_table[entry_id].multicastId == group_id:
                 LOGGER.debug("multicast group %s already subscribed", group_id)
-                return 
+                return
             if self._multicast_table[entry_id].endpoint == 0:
                 index = entry_id
         if index is None:
-            LOGGER.critical("multicast table full,  can not add %s",  group_id)
-            return 
+            LOGGER.critical("multicast table full,  can not add %s", group_id)
+            return
         self._multicast_table[index].endpoint = t.uint8_t(1)
         self._multicast_table[index].multicastId = t.EmberMulticastId(group_id)
         result = await e.setMulticastTableEntry(t.uint8_t(index), self._multicast_table[index])
-        LOGGER.debug("multicast group subscribed success")
+        return result
 
-    async def unsubscribe_group(self,  group_id):
+    async def unsubscribe_group(self, group_id):
         # check if subscribed and then remove
-        # return 0 success, 2 not exist, 
         e = self._ezsp
         state = 2
         for entry_id in self._multicast_table.keys():
@@ -362,9 +357,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 break
             entry_id += 1
 
-
     async def _write_multicast_table(self):
         # write copy to NCP
         pass
-
-
