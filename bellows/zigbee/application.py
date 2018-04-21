@@ -192,11 +192,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def _handle_frame_failure(self, message_type, destination, aps_frame, message_tag, status, message):
         try:
             send_fut, reply_fut = self._pending.pop(message_tag)
-            send_fut.set_exception(DeliveryError("Message send failure: %s" % (status, )))
-#            if reply_fut:
-#                reply_fut.cancel()
+            send_fut.set_exception(DeliveryError("Message send failure _frame_failure: %s" % (status, )))
+            if reply_fut:
+                reply_fut.cancel()
         except KeyError:
-            LOGGER.warning("Unexpected message send failure")
+            LOGGER.warning("Unexpected message send failure _frame_failure")
         except asyncio.futures.InvalidStateError as exc:
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
 
@@ -240,19 +240,22 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             send_fut.cancel()
             if expect_reply:
                 reply_fut.cancel()
-            raise DeliveryError("Message send failure %s" % (v[0], ))
-
-        # Wait for messageSentHandler message
-        v = await send_fut
+            raise DeliveryError("Message send failure _send_unicast_fail %s" % (v[0], ))
+        try:
+            v = await send_fut
+        except DeliveryError as e:
+            LOGGER.debug("DeliveryError: %s", e)
+            raise
+        except Exception as e:
+            LOGGER.debug("other Exception: %s", e)
         if expect_reply:
-            # Wait for reply
             v = await asyncio.wait_for(reply_fut, timeout)
         return v
 
-    def permit(self, time_s=60):
+    async def permit(self, time_s=60):
         assert 0 <= time_s <= 254
         """ send mgmt-permit-join to all router """
-        yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s, 0])
+        await self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s, 0])
         return self._ezsp.permitJoining(time_s)
 
     async def permit_with_key(self, node, code, time_s=60):
