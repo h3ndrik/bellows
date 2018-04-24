@@ -24,68 +24,66 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._pending = {}
         self._multicast_table = {}
 
-    @asyncio.coroutine
-    def initialize(self):
+    async def initialize(self):
         """Perform basic NCP initialization steps"""
         e = self._ezsp
 
-        yield from e.reset()
-        yield from e.version()
+        await e.reset()
+        await e.version()
 
         c = t.EzspConfigId
-        yield from self._cfg(c.CONFIG_STACK_PROFILE, 2)
-        yield from self._cfg(c.CONFIG_SECURITY_LEVEL, 5)
-        yield from self._cfg(c.CONFIG_SUPPORTED_NETWORKS, 1)
+        await self._cfg(c.CONFIG_STACK_PROFILE, 2)
+        await self._cfg(c.CONFIG_SECURITY_LEVEL, 5)
+        await self._cfg(c.CONFIG_SUPPORTED_NETWORKS, 1)
         zdo = (
             t.EmberZdoConfigurationFlags.APP_RECEIVES_SUPPORTED_ZDO_REQUESTS |
             t.EmberZdoConfigurationFlags.APP_HANDLES_UNSUPPORTED_ZDO_REQUESTS
         )
-        yield from self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
-        yield from self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
-        yield from self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
-        yield from self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16)
-        yield from self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 16)
-        yield from self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
-        yield from self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
-        yield from self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
-        yield from self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 11)
+        await self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
+        await self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
+        await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16)
+        await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 8)
+        await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
+        await self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
+        await self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
+        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
+        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 6)
+        await self._cfg(c.CONFIG_APS_UNICAST_MESSAGE_COUNT, 20)
+        await self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
 
-    @asyncio.coroutine
-    def startup(self, auto_form=False):
+    async def startup(self, auto_form=False):
         """Perform a complete application startup"""
-        yield from self.initialize()
+        await self.initialize()
         e = self._ezsp
 
-        v = yield from e.networkInit()
+        v = await e.networkInit()
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
                 raise Exception("Could not initialize network")
-            yield from self.form_network()
+            await self.form_network()
 
-        v = yield from e.getNetworkParameters()
+        v = await e.getNetworkParameters()
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         if v[1] != t.EmberNodeType.COORDINATOR:
             if not auto_form:
                 raise Exception("Network not configured as coordinator")
 
             LOGGER.info("Forming network")
-            yield from self._ezsp.leaveNetwork()
-            yield from asyncio.sleep(1)  # TODO
-            yield from self.form_network()
+            await self._ezsp.leaveNetwork()
+            await asyncio.sleep(1)  # TODO
+            await self.form_network()
 
-        yield from self._policy()
-        nwk = yield from e.getNodeId()
+        await self._policy()
+        nwk = await e.getNodeId()
         self._nwk = nwk[0]
-        ieee = yield from e.getEui64()
+        ieee = await e.getEui64()
         self._ieee = ieee[0]
 
         e.add_callback(self.ezsp_callback_handler)
 
-        yield from self._read_multicast_table()
+        await self._read_multicast_table()
 
-    @asyncio.coroutine
-    def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
+    async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
         channel = t.uint8_t(channel)
 
         if pan_id is None:
@@ -96,7 +94,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             extended_pan_id = t.fixed_list(8, t.uint8_t)([t.uint8_t(0)] * 8)
 
         initial_security_state = bellows.zigbee.util.zha_security(controller=True)
-        v = yield from self._ezsp.setInitialSecurityState(initial_security_state)
+        v = await self._ezsp.setInitialSecurityState(initial_security_state)
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
         parameters = t.EmberNetworkParameters()
@@ -109,41 +107,37 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         parameters.nwkUpdateId = t.uint8_t(0)
         parameters.channels = t.uint32_t(0)
 
-        yield from self._ezsp.formNetwork(parameters)
-        yield from self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1)
-#        yield from self._ezsp.setConcentrator(bool(1),t.EmberConcentratorType.HIGH_RAM_CONCENTRATOR, t.uint_16(30), t.uint_16(1800), t.uint_8(3), t.uint_8(3), t.uint_8(0))
+        await self._ezsp.formNetwork(parameters)
+        await self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1)
 
-    @asyncio.coroutine
-    def _cfg(self, config_id, value, optional=False):
-        v = yield from self._ezsp.setConfigurationValue(config_id, value)
+    async def _cfg(self, config_id, value, optional=False):
+        v = await self._ezsp.setConfigurationValue(config_id, value)
         if not optional:
             assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
-    @asyncio.coroutine
-    def _policy(self):
+    async def _policy(self):
         """Set up the policies for what the NCP should do"""
         e = self._ezsp
-        v = yield from e.setPolicy(
+        v = await e.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
             t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
-        v = yield from e.setPolicy(
+        v = await e.setPolicy(
             t.EzspPolicyId.APP_KEY_REQUEST_POLICY,
             t.EzspDecisionId.ALLOW_APP_KEY_REQUESTS,
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
-        v = yield from e.setPolicy(
+        v = await e.setPolicy(
             t.EzspPolicyId.TRUST_CENTER_POLICY,
             t.EzspDecisionId.ALLOW_PRECONFIGURED_KEY_JOINS,
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
-    @asyncio.coroutine
-    def force_remove(self, dev):
+    async def force_remove(self, dev):
         # This should probably be delivered to the parent device instead
         # of the device itself.
-        yield from self._ezsp.removeDevice(dev.nwk, dev.ieee, dev.ieee)
+        await self._ezsp.removeDevice(dev.nwk, dev.ieee, dev.ieee)
 
     def ezsp_callback_handler(self, frame_name, args):
         if frame_name == 'incomingMessageHandler':
@@ -251,17 +245,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 reply_fut.cancel()
             raise DeliveryError("Message send failure %s" % (v[0], ))
 
+        # Wait for messageSentHandler message
+        v = await send_fut
         if expect_reply:
-            done, pend = await asyncio.wait(
-                [send_fut, reply_fut],
-                timeout=timeout,
-                return_when='FIRST_COMPLETED')
-            if send_fut in done:
-                v = await asyncio.wait_for(reply_fut, timeout)
-            if reply_fut in done:
-                v = reply_fut.result()
-        else:
-            v = await send_fut
+            # Wait for reply
+            v = await asyncio.wait_for(reply_fut, timeout)
         return v
 
     def permit(self, time_s=60):
@@ -270,7 +258,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         yield from self.send_zdo_broadcast(0x0036, 0x0000, 0x00, [time_s, 0])
         return self._ezsp.permitJoining(time_s)
 
-    def permit_with_key(self, node, code, time_s=60):
+    async def permit_with_key(self, node, code, time_s=60):
         if type(node) is not t.EmberEUI64:
             node = t.EmberEUI64([t.uint8_t(p) for p in node])
 
@@ -278,11 +266,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if key is None:
             raise Exception("Invalid install code")
 
-        v = yield from self._ezsp.addTransientLinkKey(node, key)
+        v = await self._ezsp.addTransientLinkKey(node, key)
         if v[0] != t.EmberStatus.SUCCESS:
             raise Exception("Failed to set link key")
 
-        v = yield from self._ezsp.setPolicy(
+        v = await self._ezsp.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
             t.EzspDecisionId.GENERATE_NEW_TC_LINK_KEY,
         )
