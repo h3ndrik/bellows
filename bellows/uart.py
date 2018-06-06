@@ -96,11 +96,13 @@ class Gateway(asyncio.Protocol):
         if self._rec_seq != seq:
             if not self._reject_mode:
                 self._reject_mode = 1
-                self.write(self.nack_frame())
+                self.write(self._nack_frame())
+                LOGGER.debug("Reject_mode on %s", binascii.hexlify(data))
             return
         else:
             if self._reject_mode:
                 self._reject_mode = 0
+                LOGGER.debug("Reject_mode on %s", binascii.hexlify(data))
             self._rec_seq = (seq + 1) % 8
             self.write(self._ack_frame())
             self._handle_ack(data[0])
