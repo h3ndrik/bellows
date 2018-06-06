@@ -216,7 +216,7 @@ class Gateway(asyncio.Protocol):
 
     def _nack_frame(self):
         """Construct a nack frame."""
-        nack = ( self._rec_seq -1 ) % 8 
+        nack = ( self._rec_seq ) % 8 
         assert 0 <= nack < 8
         control = bytes([0b10100000 | (nack & 0b00000111)])
         return self._frame(control, b'')
