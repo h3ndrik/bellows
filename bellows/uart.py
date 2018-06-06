@@ -93,6 +93,8 @@ class Gateway(asyncio.Protocol):
         """Data frame receive handler."""
         LOGGER.debug("Data frame: %s", binascii.hexlify(data))
         seq = (data[0] & 0b01110000) >> 4
+        if data[0] & self.reTx:
+            LOGGER.debug("ASH retransmit received")
         if self._rec_seq != seq:
             if not self._reject_mode:
                 self._reject_mode = 1
@@ -102,7 +104,7 @@ class Gateway(asyncio.Protocol):
         else:
             if self._reject_mode:
                 self._reject_mode = 0
-                LOGGER.debug("Reject_mode on %s", binascii.hexlify(data))
+                LOGGER.debug("Reject_mode off %s", binascii.hexlify(data))
             self._rec_seq = (seq + 1) % 8
             self.write(self._ack_frame())
             self._handle_ack(data[0])
