@@ -167,6 +167,7 @@ class Gateway(asyncio.Protocol):
 
     async def reset(self):
         """Sends a reset frame."""
+        LOGGER.debug("Sending: RESET")
         # TODO: It'd be nice to delete self._reset_future.
         if self._reset_future is not None:
             raise TypeError("reset can only be called on a new connection")
