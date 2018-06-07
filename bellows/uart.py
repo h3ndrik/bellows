@@ -94,17 +94,17 @@ class Gateway(asyncio.Protocol):
         LOGGER.debug("Data frame: %s", binascii.hexlify(data))
         seq = (data[0] & 0b01110000) >> 4
         if data[0] & self.reTx:
-            LOGGER.debug("ASH retransmit received")
+            LOGGER.debug("ASH retransmit received: SEQ(%s)", seq)
         if self._rec_seq != seq:
             if not self._reject_mode:
                 self._reject_mode = 1
                 self.write(self._nack_frame())
-                LOGGER.debug("Reject_mode on %s", binascii.hexlify(data))
+                LOGGER.debug("Reject_mode on: expect SEQ(%s), got sEQ(%s)", self._rec_seq, seq)
             return
         else:
             if self._reject_mode:
                 self._reject_mode = 0
-                LOGGER.debug("Reject_mode off %s", binascii.hexlify(data))
+                LOGGER.debug("Reject_mode off SEQ(%s)", seq)
             self._rec_seq = (seq + 1) % 8
             self.write(self._ack_frame())
             self._handle_ack(data[0])
@@ -128,6 +128,7 @@ class Gateway(asyncio.Protocol):
         """Reset acknowledgement frame receive handler."""
         self._send_seq = 0
         self._rec_seq = 0
+        self._reject_mode = 0
         try:
             code = t.NcpResetCode(data[2])
         except ValueError:
