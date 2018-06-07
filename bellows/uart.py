@@ -146,7 +146,15 @@ class Gateway(asyncio.Protocol):
 
     def error_frame_received(self, data):
         """Error frame receive handler."""
-        LOGGER.debug("Error frame: %s", binascii.hexlify(data))
+        try:
+            code = t.NcpResetCode(data[2])
+        except ValueError:
+            code = t.NcpResetCode.ERROR_UNKNOWN_EM3XX_ERROR
+        if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT:
+            self.reset()
+            LOGGER.warn("Error (%s), reset connection", code.name)
+        else:
+            LOGGER.debug("Error frame: %s", binascii.hexlify(data))
 
     def write(self, data):
         """Send data to the uart."""
@@ -157,7 +165,7 @@ class Gateway(asyncio.Protocol):
         self._sendq.put_nowait(self.Terminator)
         self._transport.close()
 
-    def reset(self):
+    async def reset(self):
         """Sends a reset frame."""
         # TODO: It'd be nice to delete self._reset_future.
         if self._reset_future is not None:
@@ -165,7 +173,8 @@ class Gateway(asyncio.Protocol):
 
         self.write(self._rst_frame())
         self._reset_future = asyncio.Future()
-        return self._reset_future
+        await self._reset_future
+        self._reset_future = None
 
     async def _send_task(self):
         """Send queue handler."""
@@ -216,7 +225,7 @@ class Gateway(asyncio.Protocol):
 
     def _nack_frame(self):
         """Construct a nack frame."""
-        nack = ( self._rec_seq -1 ) % 8 
+        nack = (self._rec_seq) % 8
         assert 0 <= nack < 8
         control = bytes([0b10100000 | (nack & 0b00000111)])
         return self._frame(control, b'')
