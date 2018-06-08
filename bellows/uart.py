@@ -162,8 +162,8 @@ class Gateway(asyncio.Protocol):
         except ValueError:
             code = t.NcpResetCode.ERROR_UNKNOWN_EM3XX_ERROR
         if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT:
-            self.reset()
             LOGGER.warn("Error (%s), reset connection", code.name)
+            self.write(self._rst_frame())
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
 
