@@ -37,7 +37,7 @@ class Gateway(asyncio.Protocol):
         self._sendq = asyncio.Queue()
         self._pending = (-1, None)
         self._reject_mode = 0
-        self._rx_win_ack = []
+        self._rx_buffer = []
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
@@ -113,7 +113,13 @@ class Gateway(asyncio.Protocol):
             self._rec_seq = (seq + 1) % 8
             self.write(self._ack_frame())
             self._handle_ack(data[0])
-            self._application.frame_received(self._randomize(data[1:-3]))
+            frame_data = self._randomize(data[1:-3])
+            if retrans and (self._rx_buffer[seq] == frame_data):
+                LOGGER.debug("DUP Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(data))
+                return
+                
+            self._rx_buffer[seq] = frame_data
+            self._application.frame_received(frame_data)
 
     def ack_frame_received(self, data):
         """Acknowledgement frame receive handler."""
