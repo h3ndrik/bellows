@@ -91,8 +91,9 @@ class Gateway(asyncio.Protocol):
 
     def data_frame_received(self, data):
         """Data frame receive handler."""
-        LOGGER.debug("Data frame: %s", binascii.hexlify(data))
         seq = (data[0] & 0b01110000) >> 4
+        LOGGER.debug("Data frame SEQ(%s): %s", seq,  binascii.hexlify(data))
+        
         if data[0] & self.reTx:
             LOGGER.debug("ASH retransmit received: SEQ(%s)", seq)
         if self._rec_seq != seq:
