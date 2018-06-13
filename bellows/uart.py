@@ -21,6 +21,7 @@ class Gateway(asyncio.Protocol):
     RANDOMIZE_START = 0x42
     RANDOMIZE_SEQ = 0xB8
     reTx = 0b00001000
+    
 
     RESERVED = FLAG + ESCAPE + XON + XOFF + SUBSTITUTE + CANCEL
 
@@ -38,6 +39,10 @@ class Gateway(asyncio.Protocol):
         self._pending = (-1, None)
         self._reject_mode = 0
         self._rx_buffer = dict()
+        self._send_win = 4
+        self._tx_buffer = dict()
+        self._send_ack = 0
+        
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
@@ -194,12 +199,14 @@ class Gateway(asyncio.Protocol):
             item = await self._sendq.get()
             if item is self.Terminator:
                 break
-            data, seq = item
+            seq = self._send_seq
+            self._send_seq = (seq + 1) % 8
             success = False
             rxmit = 0
+            self._tx_buffer[seq] = item
             while not success:
                 self._pending = (seq, asyncio.Future())
-                self.write(self._data_frame(data, seq, rxmit))
+                self.write(self._data_frame(item, seq, rxmit))
                 rxmit = 1
                 success = await self._pending[1]
 
@@ -218,9 +225,7 @@ class Gateway(asyncio.Protocol):
 
     def data(self, data):
         """Send a data frame."""
-        seq = self._send_seq
-        self._send_seq = (seq + 1) % 8
-        self._sendq.put_nowait((data, seq))
+        self._sendq.put_nowait((data))
 
     def _data_frame(self, data, seq, rxmit):
         """Construct a data frame."""
