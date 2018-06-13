@@ -167,7 +167,7 @@ class Gateway(asyncio.Protocol):
         except ValueError:
             code = t.NcpResetCode.ERROR_UNKNOWN_EM3XX_ERROR
         if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT:
-            LOGGER.warn("Error (%s), reset connection", code.name)
+            LOGGER.error("Error (%s), reset connection", code.name)
             self.write(self._rst_frame())
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
@@ -185,8 +185,8 @@ class Gateway(asyncio.Protocol):
         """Sends a reset frame."""
         LOGGER.debug("Sending: RESET")
         # TODO: It'd be nice to delete self._reset_future.
-        if self._reset_future is not None:
-            raise TypeError("reset can only be called on a new connection")
+#        if self._reset_future is not None:
+#            raise TypeError("reset can only be called on a new connection")
 
         self.write(self._rst_frame())
         self._reset_future = asyncio.Future()
