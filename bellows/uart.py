@@ -42,7 +42,7 @@ class Gateway(asyncio.Protocol):
         self._send_win = 4
         self._tx_buffer = dict()
         self._send_ack = 0
-        
+        self._failed_mode = 0
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
@@ -144,6 +144,7 @@ class Gateway(asyncio.Protocol):
         self._send_seq = 0
         self._rec_seq = 0
         self._reject_mode = 0
+        self._failed_mode = 0
         try:
             code = t.NcpResetCode(data[2])
         except ValueError:
@@ -168,7 +169,9 @@ class Gateway(asyncio.Protocol):
             code = t.NcpResetCode.ERROR_UNKNOWN_EM3XX_ERROR
         if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT:
             LOGGER.error("Error (%s), reset connection", code.name)
-            self.write(self._rst_frame())
+#            self.write(self._rst_frame())
+            self._failed_mode = 1
+            self.reset()
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
 
@@ -190,12 +193,15 @@ class Gateway(asyncio.Protocol):
 
         self.write(self._rst_frame())
         self._reset_future = asyncio.Future()
+
         await self._reset_future
         self._reset_future = None
 
     async def _send_task(self):
         """Send queue handler."""
         while True:
+            if self._failed_mode:
+                break
             item = await self._sendq.get()
             if item is self.Terminator:
                 break
