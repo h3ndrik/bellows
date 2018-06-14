@@ -49,7 +49,7 @@ class Gateway(asyncio.Protocol):
         self._transport = transport
         if self._connected_future is not None:
             self._connected_future.set_result(True)
-            asyncio.async(self._send_task())
+            asyncio.ensure_future(self._send_task())
 
     def data_received(self, data):
         """Callback when there is data received from the uart."""
@@ -171,7 +171,7 @@ class Gateway(asyncio.Protocol):
             LOGGER.error("Error (%s), reset connection", code.name)
 #            self.write(self._rst_frame())
             self._failed_mode = 1
-            self.reset()
+            asyncio.ensure_future(self.reset())
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
 
