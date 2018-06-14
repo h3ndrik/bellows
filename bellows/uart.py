@@ -200,21 +200,20 @@ class Gateway(asyncio.Protocol):
     async def _send_task(self):
         """Send queue handler."""
         while True:
-            if self._failed_mode:
-                break
             item = await self._sendq.get()
             if item is self.Terminator:
                 break
-            seq = self._send_seq
-            self._send_seq = (seq + 1) % 8
-            success = False
-            rxmit = 0
-            self._tx_buffer[seq] = item
-            while not success:
-                self._pending = (seq, asyncio.Future())
-                self.write(self._data_frame(item, seq, rxmit))
-                rxmit = 1
-                success = await self._pending[1]
+            if  not self._failed_mode:
+                seq = self._send_seq
+                self._send_seq = (seq + 1) % 8
+                success = False
+                rxmit = 0
+                self._tx_buffer[seq] = item
+                while not success:
+                    self._pending = (seq, asyncio.Future())
+                    self.write(self._data_frame(item, seq, rxmit))
+                    rxmit = 1
+                    success = await self._pending[1]
 
     def _handle_ack(self, control):
         """Handle an acknowledgement frame."""
