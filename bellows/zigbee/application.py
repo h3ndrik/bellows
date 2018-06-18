@@ -24,6 +24,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         self._pending = {}
         self._multicast_table = {}
+        self._startup = False
 
     async def initialize(self):
         """Perform basic NCP initialization steps"""
@@ -54,6 +55,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     async def startup(self, auto_form=False):
         """Perform a complete application startup"""
+        if self._startup:
+            LOGGER.debug("startup already running")
+        self._startup = True
         await self.initialize()
         e = self._ezsp
 
@@ -83,6 +87,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         e.add_callback(self.ezsp_callback_handler)
 
         await self._read_multicast_table()
+        self._startup = True
 
     async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
         channel = t.uint8_t(channel)
