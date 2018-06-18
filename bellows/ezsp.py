@@ -16,6 +16,8 @@ class EZSP:
     ezsp_version = 4
 
     def __init__(self):
+        self._restart = 0
+        self.app_restart = None
         self._callbacks = {}
         self._seq = 0
         self._gw = None
@@ -38,6 +40,16 @@ class EZSP:
             LOGGER.debug("Switching to eszp version %d", result[0])
             await self._command('version', result[0])
 
+    async def restart(self):
+        LOGGER.debug("called restart controller")
+        if self._restart == 0:
+            self._restart = 1 
+            LOGGER.debug("restarting controller")
+            self.handle_callback('ControllerRestart', [])
+
+            LOGGER.debug("restart controller done")
+            self._restart = 0
+
     def close(self):
         return self._gw.close()
 
@@ -58,7 +70,12 @@ class EZSP:
     def _command(self, name, *args):
         LOGGER.debug("Send command %s", name)
         data = self._ezsp_frame(name, *args)
-        self._gw.data(data)
+        try:
+            self._gw.data(data)
+        except Exception as e:
+            LOGGER.debug("catched:%s", e)
+            asyncio.ensure_future(self.restart())
+            return
         c = self.COMMANDS[name]
         future = asyncio.Future()
         self._awaiting[self._seq] = (c[0], c[2], future)

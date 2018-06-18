@@ -123,7 +123,10 @@ class Gateway(asyncio.Protocol):
                 return
                 
             self._rx_buffer[seq] = frame_data
-            self._application.frame_received(frame_data)
+            try:
+                self._application.frame_received(frame_data)
+            except:
+                pass
 
     def ack_frame_received(self, data):
         """Acknowledgement frame receive handler."""
@@ -161,6 +164,7 @@ class Gateway(asyncio.Protocol):
 
         self._reset_future.set_result(True)
 
+
     def error_frame_received(self, data):
         """Error frame receive handler."""
         try:
@@ -171,7 +175,10 @@ class Gateway(asyncio.Protocol):
             LOGGER.error("Error (%s), reset connection", code.name)
 #            self.write(self._rst_frame())
             self._failed_mode = 1
-            asyncio.ensure_future(self.reset())
+#            await self.reset()
+#            await self._application.version()
+            asyncio.ensure_future(self._application.restart())
+
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
 
@@ -188,8 +195,10 @@ class Gateway(asyncio.Protocol):
         """Sends a reset frame."""
         LOGGER.debug("Sending: RESET")
         # TODO: It'd be nice to delete self._reset_future.
-#        if self._reset_future is not None:
-#            raise TypeError("reset can only be called on a new connection")
+        if self._reset_future is not None:
+            LOGGER.debug("reset can only be called on a new connection")
+            await self._reset_future
+            return
 
         self.write(self._rst_frame())
         self._reset_future = asyncio.Future()
@@ -197,13 +206,15 @@ class Gateway(asyncio.Protocol):
         await self._reset_future
         self._reset_future = None
 
+        LOGGER.warn("Reset success")
+
     async def _send_task(self):
         """Send queue handler."""
         while True:
-            item = await self._sendq.get()
-            if item is self.Terminator:
-                break
-            if  not self._failed_mode:
+            if not self._failed_mode:
+                item = await self._sendq.get()
+                if item is self.Terminator:
+                    break
                 seq = self._send_seq
                 self._send_seq = (seq + 1) % 8
                 success = False
@@ -214,6 +225,8 @@ class Gateway(asyncio.Protocol):
                     self.write(self._data_frame(item, seq, rxmit))
                     rxmit = 1
                     success = await self._pending[1]
+            else: 
+                await asyncio.sleep(0.01)
 
     def _handle_ack(self, control):
         """Handle an acknowledgement frame."""
@@ -230,6 +243,9 @@ class Gateway(asyncio.Protocol):
 
     def data(self, data):
         """Send a data frame."""
+        if self._failed_mode:
+            LOGGER.debug("send data, Failed mode")
+            raise Exception("Failed_Mode")
         self._sendq.put_nowait((data))
 
     def _data_frame(self, data, seq, rxmit):
