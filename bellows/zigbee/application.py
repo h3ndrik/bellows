@@ -159,7 +159,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             else:
                 self.handle_join(args[0], args[1], args[4])
         elif frame_name == 'ControllerRestart':
-               asyncio.ensure_future(self.startup())
+                asyncio.ensure_future(self.startup())
 
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:
