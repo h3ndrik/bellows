@@ -57,6 +57,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         """Perform a complete application startup"""
         if self._startup:
             LOGGER.debug("startup already running")
+            return
         self._startup = True
         await self.initialize()
         e = self._ezsp
