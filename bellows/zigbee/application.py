@@ -242,7 +242,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         aps_frame.groupId = t.uint16_t(0)
         aps_frame.sequence = t.uint8_t(sequence)
-
+        LOGGER.debug("sendUnicast to %s:%s:%s", nwk, dst_ep, cluster)
         v = await self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data)
         if v[0] != t.EmberStatus.SUCCESS:
             self._pending.pop(sequence)
