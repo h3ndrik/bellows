@@ -21,7 +21,6 @@ class Gateway(asyncio.Protocol):
     RANDOMIZE_START = 0x42
     RANDOMIZE_SEQ = 0xB8
     reTx = 0b00001000
-    
 
     RESERVED = FLAG + ESCAPE + XON + XOFF + SUBSTITUTE + CANCEL
 
@@ -98,7 +97,7 @@ class Gateway(asyncio.Protocol):
     def data_frame_received(self, data):
         """Data frame receive handler."""
         seq = (data[0] & 0b01110000) >> 4
-        
+
         if data[0] & self.reTx:
             retrans = 1
         else:
@@ -121,7 +120,7 @@ class Gateway(asyncio.Protocol):
             if retrans and (self._rx_buffer[seq] == frame_data):
                 LOGGER.debug("DUP Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(data))
                 return
-                
+
             self._rx_buffer[seq] = frame_data
             try:
                 self._application.frame_received(frame_data)
@@ -163,7 +162,6 @@ class Gateway(asyncio.Protocol):
             return
 
         self._reset_future.set_result(True)
-
 
     def error_frame_received(self, data):
         """Error frame receive handler."""
@@ -225,7 +223,7 @@ class Gateway(asyncio.Protocol):
                     self.write(self._data_frame(item, seq, rxmit))
                     rxmit = 1
                     success = await self._pending[1]
-            else: 
+            else:
                 await asyncio.sleep(0.01)
 
     def _handle_ack(self, control):

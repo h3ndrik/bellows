@@ -61,7 +61,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._startup = True
         await self.initialize()
         e = self._ezsp
-
+        e.remove_callback(self.ezsp_callback_handler)
         v = await e.networkInit()
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
@@ -88,7 +88,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         e.add_callback(self.ezsp_callback_handler)
 
         await self._read_multicast_table()
-        self._startup = True
+        self._startup = False
 
     async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
         channel = t.uint8_t(channel)

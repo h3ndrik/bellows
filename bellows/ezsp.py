@@ -42,13 +42,8 @@ class EZSP:
 
     def restart(self):
         LOGGER.debug("called restart controller")
-        if self._restart == 0:
-            self._restart = 1 
-            LOGGER.debug("restarting controller")
-            self.handle_callback('ControllerRestart', [])
+        self.handle_callback('ControllerRestart', [])
 
-            LOGGER.debug("restart controller done")
-            self._restart = 0
 
     def close(self):
         return self._gw.close()
@@ -203,7 +198,7 @@ class EZSP:
         return id_
 
     def remove_callback(self, id_):
-        return self._callbacks.pop(id_)
+        return self._callbacks.pop(id_, None)
 
     def handle_callback(self, *args):
         for callback_id, handler in self._callbacks.items():
