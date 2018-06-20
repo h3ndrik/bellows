@@ -40,7 +40,7 @@ class EZSP:
             LOGGER.debug("Switching to eszp version %d", result[0])
             await self._command('version', result[0])
 
-    async def restart(self):
+    def restart(self):
         LOGGER.debug("called restart controller")
         if self._restart == 0:
             self._restart = 1 

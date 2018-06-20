@@ -171,13 +171,13 @@ class Gateway(asyncio.Protocol):
             code = t.NcpResetCode(data[2])
         except ValueError:
             code = t.NcpResetCode.ERROR_UNKNOWN_EM3XX_ERROR
-        if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT:
+        if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT and not self._failed_mode:
             LOGGER.error("Error (%s), reset connection", code.name)
 #            self.write(self._rst_frame())
             self._failed_mode = 1
 #            await self.reset()
 #            await self._application.version()
-            asyncio.ensure_future(self._application.restart())
+            self._application.restart()
 
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
