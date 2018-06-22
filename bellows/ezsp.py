@@ -21,6 +21,7 @@ class EZSP:
         self._callbacks = {}
         self._seq = 0
         self._gw = None
+        self.recq = asyncio.Queue()
         self._awaiting = {}
         self.COMMANDS_BY_ID = {}
         for name, details in self.COMMANDS.items():
@@ -43,7 +44,6 @@ class EZSP:
     def restart(self):
         LOGGER.debug("called restart controller")
         self.handle_callback('ControllerRestart', [])
-
 
     def close(self):
         return self._gw.close()
@@ -78,7 +78,7 @@ class EZSP:
         return future
 
     async def _list_command(self, name, item_frames, completion_frame, spos, *args):
-        """Run a command, returning result callbacks as a list"""
+        """Run a command, returning result callbacks as a list."""
         fut = asyncio.Future()
         results = []
 
@@ -156,11 +156,12 @@ class EZSP:
         return functools.partial(self._command, name)
 
     def frame_received(self, data):
-        """Handle a received EZSP frame
+        """Handle a received EZSP frame.
 
         The protocol has taken care of UART specific framing etc, so we should
         just have EZSP application stuff here, with all escaping/stuffing and
         data randomization removed.
+
         """
         sequence, frame_id, data = data[0], data[2], data[3:]
         if frame_id == 0xFF:
@@ -186,9 +187,16 @@ class EZSP:
             frame_name = self.COMMANDS_BY_ID[frame_id][0]
             result, data = t.deserialize(data, schema)
             self.handle_callback(frame_name, result)
+            self._store_rec_frame(frame_name, result)
 
         if frame_id == 0x00:
             self.ezsp_version = result[0]
+
+    def _store_rec_frame(self, *item):
+        return self.recq.put_nowait(tuple(item))
+
+    async def get_rec_frame(self):
+        return await self.recq.get()
 
     def add_callback(self, cb):
         id_ = hash(cb)

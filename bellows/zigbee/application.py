@@ -27,7 +27,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._startup = False
 
     async def initialize(self):
-        """Perform basic NCP initialization steps"""
+        """Perform basic NCP initialization steps."""
         e = self._ezsp
 
         await e.reset()
@@ -54,14 +54,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
 
     async def startup(self, auto_form=False):
-        """Perform a complete application startup"""
+        """Perform a complete application startup."""
         if self._startup:
             LOGGER.debug("startup already running")
             return
         self._startup = True
         await self.initialize()
         e = self._ezsp
-        e.remove_callback(self.ezsp_callback_handler)
+#        e.remove_callback(self.ezsp_callback_handler)
         v = await e.networkInit()
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
@@ -85,8 +85,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         ieee = await e.getEui64()
         self._ieee = ieee[0]
 
-        e.add_callback(self.ezsp_callback_handler)
-
+#        e.add_callback(self.ezsp_callback_handler)
+        asyncio.ensure_future(self._pull_frames())
         await self._read_multicast_table()
         self._startup = False
 
@@ -123,7 +123,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
     async def _policy(self):
-        """Set up the policies for what the NCP should do"""
+        """Set up the policies for what the NCP should do."""
         e = self._ezsp
         v = await e.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
@@ -159,8 +159,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 self.handle_leave(args[0], args[1])
             else:
                 self.handle_join(args[0], args[1], args[4])
-        elif frame_name == 'ControllerRestart':
+
+    async def _pull_frames(self):
+        """continously pull frames out of rec queue."""
+        e = self._ezsp
+        while True:
+            frame_name, args = await e.get_rec_frame()
+            if frame_name == 'ControllerRestart':
                 asyncio.ensure_future(self.startup())
+                break
+            self.ezsp_callback_handler(frame_name, args)
 
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:
@@ -290,7 +298,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         return self._ezsp.permitJoining(time_s, True)
 
     async def send_zdo_broadcast(self, command, grpid, radius, args):
-        """ create aps_frame for zdo broadcast"""
+        """ create aps_frame for zdo broadcast."""
         aps_frame = t.EmberApsFrame()
         aps_frame.profileId = t.uint16_t(0x0000)        # 0 for zdo
         aps_frame.clusterId = t.uint16_t(command)
