@@ -69,7 +69,7 @@ class EZSP:
             self._gw.data(data)
         except Exception as e:
             LOGGER.debug("catched:%s", e)
-            asyncio.ensure_future(self.restart())
+            self.restart()
             return
         c = self.COMMANDS[name]
         future = asyncio.Future()

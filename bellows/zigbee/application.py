@@ -166,6 +166,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         while True:
             frame_name, args = await e.get_rec_frame()
             if frame_name == 'ControllerRestart':
+                LOGGER.debug("call startup and stop polling frames")
                 asyncio.ensure_future(self.startup())
                 break
             self.ezsp_callback_handler(frame_name, args)
