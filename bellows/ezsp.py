@@ -43,7 +43,7 @@ class EZSP:
 
     def restart(self):
         LOGGER.debug("called restart controller")
-        self.handle_callback('ControllerRestart', [])
+        self._store_rec_frame('ControllerRestart', [])
 
     def close(self):
         return self._gw.close()
