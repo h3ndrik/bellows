@@ -318,7 +318,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._ezsp.sendBroadcast(0xfffd, aps_frame, radius, len(data), data)
 
     async def subscribe_group(self, group_id):
-        # check if already subscribed, if not find a free entry and subscribe group_id
+        """check if already subscribed, if not find a free entry and subscribe group_id."""
 
         e = self._ezsp
         index = None
