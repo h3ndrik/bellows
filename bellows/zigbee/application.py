@@ -159,6 +159,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 self.handle_leave(args[0], args[1])
             else:
                 self.handle_join(args[0], args[1], args[4])
+        elif frame_name == 'incomingRouteRecordHandler':
+            self._handle_route_record(args)
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
@@ -230,7 +232,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.warning("Unexpected message send notification")
         except asyncio.futures.InvalidStateError as exc:
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
-
+    def _handle_route_record(self, args):
+        LOGGER.debug("Route Record:%s", args)
+        
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
         assert sequence not in self._pending
