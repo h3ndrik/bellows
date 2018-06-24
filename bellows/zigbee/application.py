@@ -160,7 +160,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             else:
                 self.handle_join(args[0], args[1], args[4])
         elif frame_name == 'incomingRouteRecordHandler':
-            self._handle_route_record(args)
+            self._handle_route_record(*args)
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
@@ -171,8 +171,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 LOGGER.debug("call startup and stop polling frames")
                 asyncio.ensure_future(self.startup())
                 break
-            self.ezsp_callback_handler(frame_name, args)
-
+            try:
+                self.ezsp_callback_handler(frame_name, args)
+            except Exception as e:
+                LOGGER.debug("%s", e)
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:
             device = self.get_device(nwk=sender)
@@ -233,8 +235,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         except asyncio.futures.InvalidStateError as exc:
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
 
-    def _handle_route_record(self, args):
-        LOGGER.debug("Route Record:%s", args)
+    def _handle_route_record(self, *args):
+        LOGGER.debug("Route Record:%s", *args)
 
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
