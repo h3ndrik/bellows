@@ -175,6 +175,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 self.ezsp_callback_handler(frame_name, args)
             except Exception as e:
                 LOGGER.debug("%s", e)
+                
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:
             device = self.get_device(nwk=sender)
