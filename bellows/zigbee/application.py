@@ -159,14 +159,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 self.handle_leave(args[0], args[1])
             else:
                 self.handle_join(args[0], args[1], args[4])
-        elif frame_name == 'incomingRouteRecordHandler':
-            self._handle_route_record(*args)
+#        elif frame_name == 'incomingRouteRecordHandler':
+#            self._handle_route_record(*args)
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
         e = self._ezsp
         while True:
             frame_name, args = await e.get_rec_frame()
+            LOGGER.debug("pulled %s", frame_name)
             if frame_name == 'ControllerRestart':
                 LOGGER.debug("call startup and stop polling frames")
                 asyncio.ensure_future(self.startup())
