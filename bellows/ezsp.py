@@ -195,6 +195,11 @@ class EZSP:
     def _store_rec_frame(self, *item):
         return self.recq.put_nowait(tuple(item))
 
+    def clear_rec_frame(self):
+        while not self.recq.empty():
+            self.recq.get_nowait()
+        LOGGER.debug("cleared receive queue")
+
     async def get_rec_frame(self):
         return await self.recq.get()
 
