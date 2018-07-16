@@ -84,11 +84,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._nwk = nwk[0]
         ieee = await e.getEui64()
         self._ieee = ieee[0]
-
+        self._startup = False
 #        e.add_callback(self.ezsp_callback_handler)
         asyncio.ensure_future(self._pull_frames())
         await self._read_multicast_table()
-        self._startup = False
 
     async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
         channel = t.uint8_t(channel)
@@ -160,7 +159,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             else:
                 self.handle_join(args[0], args[1], args[4])
         elif frame_name == 'incomingRouteRecordHandler':
-            self._handle_route_record(*args)
+            self._handle_route_record(args[0], args[4])
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
