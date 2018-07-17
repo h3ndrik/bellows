@@ -163,12 +163,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
+        LOGGER.debug("Run receive queue poller")
         e = self._ezsp
         while True:
             frame_name, args = await e.get_rec_frame()
+            LOGGER.debug("pulled %s", frame_name)
             if frame_name == 'ControllerRestart':
                 LOGGER.debug("call startup and stop polling frames")
+                e.clear_rec_frame()
                 asyncio.ensure_future(self.startup())
+                LOGGER.debug("Exit receive queue poller")
                 break
             try:
                 self.ezsp_callback_handler(frame_name, args)
@@ -236,11 +240,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
 
     def _handle_route_record(self, *args):
-        LOGGER.debug("Route Record:%s", *args)
+        LOGGER.debug("Route Record:%s", args)
 
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
         assert sequence not in self._pending
+        LOGGER.debug("pending message queue length: %s", len(self._pending))
         send_fut = asyncio.Future()
         reply_fut = None
         if expect_reply:
