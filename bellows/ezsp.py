@@ -36,10 +36,10 @@ class EZSP:
 
     async def version(self):
         version = self.ezsp_version
-        result = await self._command('version', version)
+        result = await self._command('version', version, queue=False)
         if result[0] != version:
             LOGGER.debug("Switching to eszp version %d", result[0])
-            await self._command('version', result[0])
+            await self._command('version', result[0], queue=False)
 
     def restart(self):
         LOGGER.debug("called restart controller")
@@ -62,15 +62,17 @@ class EZSP:
 
         return bytes(frame) + data
 
-    def _command(self, name, *args):
+    async def _command(self, name, *args, queue = True):
         LOGGER.debug("Send command %s", name)
         data = self._ezsp_frame(name, *args)
-        try:
-            self._gw.data(data)
-        except Exception as e:
-            LOGGER.debug("catched:%s", e)
-            self.restart()
-            return
+        if queue:
+            try:
+                self._gw.data(data)
+            except Exception as e:
+                LOGGER.debug("catched:%s", e)
+                return
+        else:
+               await self._gw.data_noqueue(data)
         c = self.COMMANDS[name]
         future = asyncio.Future()
         self._awaiting[self._seq] = (c[0], c[2], future)
