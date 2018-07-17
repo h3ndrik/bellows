@@ -42,6 +42,7 @@ class Gateway(asyncio.Protocol):
         self._tx_buffer = dict()
         self._send_ack = 0
         self._failed_mode = 0
+        self._Run_Event = asyncio.Event()
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
@@ -79,7 +80,7 @@ class Gateway(asyncio.Protocol):
 
     def frame_received(self, data):
         """Frame receive handler."""
-        if (data[0] & 0b10000000) == 0:
+        if (((data[0] & 0b10000000) == 0) and self._Run_Event.is_set()):
             self.data_frame_received(data)
         elif (data[0] & 0b11100000) == 0b10000000:
             self.ack_frame_received(data)
@@ -162,6 +163,7 @@ class Gateway(asyncio.Protocol):
             return
 
         self._reset_future.set_result(True)
+        self._Run_Event.set()
 
     def error_frame_received(self, data):
         """Error frame receive handler."""
@@ -169,9 +171,10 @@ class Gateway(asyncio.Protocol):
             code = t.NcpResetCode(data[2])
         except ValueError:
             code = t.NcpResetCode.ERROR_UNKNOWN_EM3XX_ERROR
-        if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT and not self._failed_mode:
+        if code is t.NcpResetCode.ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT and self._Run_Event.is_set():
             LOGGER.error("Error (%s), reset connection", code.name)
             self._failed_mode = 1
+            self._Run_Event.clear()
             self._application.restart()
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
@@ -205,22 +208,28 @@ class Gateway(asyncio.Protocol):
     async def _send_task(self):
         """Send queue handler."""
         while True:
-            if not self._failed_mode:
-                item = await self._sendq.get()
-                if item is self.Terminator:
-                    break
-                seq = self._send_seq
-                self._send_seq = (seq + 1) % 8
-                success = False
-                rxmit = 0
-                self._tx_buffer[seq] = item
-                while not success:
-                    self._pending = (seq, asyncio.Future())
-                    self.write(self._data_frame(item, seq, rxmit))
-                    rxmit = 1
-                    success = await self._pending[1]
-            else:
-                await asyncio.sleep(0.01)
+            await self._Run_Event.wait()
+            item = await self._sendq.get()
+            if item is self.Terminator:
+                break
+            seq = self._send_seq
+            self._send_seq = (seq + 1) % 8
+            success = False
+            rxmit = 0
+            self._tx_buffer[seq] = item
+            while not success:
+                self._pending = (seq, asyncio.Future())
+                self.write(self._data_frame(item, seq, rxmit))
+                rxmit = 1
+                success = await self._pending[1]
+
+    def  data_noqeue(self, item):
+         seq = self._send_seq
+         self._send_seq = (seq + 1) % 8
+         rxmit = 0
+         self._pending = (seq, asyncio.Future())
+         self.write(self._data_frame(item, seq, rxmit))
+         success = await self._pending[1]
 
     def _handle_ack(self, control):
         """Handle an acknowledgement frame."""
@@ -237,9 +246,6 @@ class Gateway(asyncio.Protocol):
 
     def data(self, data):
         """Send a data frame."""
-        if self._failed_mode:
-            LOGGER.debug("send data, Failed mode")
-            raise Exception("Failed_Mode")
         self._sendq.put_nowait((data))
 
     def _data_frame(self, data, seq, rxmit):
@@ -309,6 +315,8 @@ class Gateway(asyncio.Protocol):
             else:
                 out += bytes([c])
         return out
+    def Run_enable(self):
+        self._Run_Event.set()
 
 
 async def connect(port, baudrate, application, loop=None):
