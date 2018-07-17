@@ -159,7 +159,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             else:
                 self.handle_join(args[0], args[1], args[4])
         elif frame_name == 'incomingRouteRecordHandler':
-            self._handle_route_record(args[0], args[4])
+            self.handle_RouteRecord(args[0], args[4])
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
