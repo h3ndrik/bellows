@@ -43,13 +43,15 @@ class Gateway(asyncio.Protocol):
         self._send_ack = 0
         self._failed_mode = 0
         self._Run_Event = asyncio.Event()
+        self._Run_Event.set()
+        self._task_send_task = None
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
         self._transport = transport
         if self._connected_future is not None:
             self._connected_future.set_result(True)
-            asyncio.ensure_future(self._send_task())
+            self._task_send_task = asyncio.ensure_future(self._send_task())
 
     def data_received(self, data):
         """Callback when there is data received from the uart."""
@@ -79,8 +81,9 @@ class Gateway(asyncio.Protocol):
         return None, data
 
     def frame_received(self, data):
+        LOGGER.debug("Status _send_task.done: %s",self._task_send_task.done())
         """Frame receive handler."""
-        if (((data[0] & 0b10000000) == 0) and self._Run_Event.is_set()):
+        if (data[0] & 0b10000000) == 0:
             self.data_frame_received(data)
         elif (data[0] & 0b11100000) == 0b10000000:
             self.ack_frame_received(data)
@@ -115,6 +118,7 @@ class Gateway(asyncio.Protocol):
                 self._reject_mode = 0
                 LOGGER.debug("Reject_mode off SEQ(%s)", seq)
             self._rec_seq = (seq + 1) % 8
+#            if self._Run_Event.is_set():
             self.write(self._ack_frame())
             self._handle_ack(data[0])
             frame_data = self._randomize(data[1:-3])
@@ -163,7 +167,6 @@ class Gateway(asyncio.Protocol):
             return
 
         self._reset_future.set_result(True)
-        self._Run_Event.set()
 
     def error_frame_received(self, data):
         """Error frame receive handler."""
@@ -207,8 +210,14 @@ class Gateway(asyncio.Protocol):
 
     async def _send_task(self):
         """Send queue handler."""
+        LOGGER.debug("Start sendq loop")
         while True:
-            await self._Run_Event.wait()
+#            await self._Run_Event.wait()
+            if not self._Run_Event.is_set():
+                await asyncio.sleep(2)
+                LOGGER.debug("send_task blocked")
+                continue 
+            LOGGER.debug("read sendq item")
             item = await self._sendq.get()
             if item is self.Terminator:
                 break
@@ -222,12 +231,14 @@ class Gateway(asyncio.Protocol):
                 self.write(self._data_frame(item, seq, rxmit))
                 rxmit = 1
                 success = await self._pending[1]
+        LOGGER.debug("End sendq loop")
 
-    def  data_noqeue(self, item):
+    async def data_noqueue(self, item):
          seq = self._send_seq
          self._send_seq = (seq + 1) % 8
          rxmit = 0
          self._pending = (seq, asyncio.Future())
+         LOGGER.debug("write noqueue: %s", seq)
          self.write(self._data_frame(item, seq, rxmit))
          success = await self._pending[1]
 
@@ -247,6 +258,7 @@ class Gateway(asyncio.Protocol):
     def data(self, data):
         """Send a data frame."""
         self._sendq.put_nowait((data))
+        LOGGER.debug("add command to send queue: %s-%s", self._task_send_task.done(), self._Run_Event.is_set())
 
     def _data_frame(self, data, seq, rxmit):
         """Construct a data frame."""
@@ -315,9 +327,10 @@ class Gateway(asyncio.Protocol):
             else:
                 out += bytes([c])
         return out
+
     def Run_enable(self):
         self._Run_Event.set()
-
+        LOGGER.debug("enable run")
 
 async def connect(port, baudrate, application, loop=None):
     if loop is None:

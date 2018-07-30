@@ -32,7 +32,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         await e.reset()
         await e.version()
-
+        asyncio.ensure_future(self._pull_frames())
         c = t.EzspConfigId
         await self._cfg(c.CONFIG_STACK_PROFILE, 2)
         await self._cfg(c.CONFIG_SECURITY_LEVEL, 5)
@@ -62,31 +62,33 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self.initialize()
         e = self._ezsp
 #        e.remove_callback(self.ezsp_callback_handler)
-        v = await e.networkInit()
+        v = await e.networkInit(queue=False)
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
                 raise Exception("Could not initialize network")
             await self.form_network()
 
-        v = await e.getNetworkParameters()
+        v = await e.getNetworkParameters(queue = False)
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         if v[1] != t.EmberNodeType.COORDINATOR:
             if not auto_form:
                 raise Exception("Network not configured as coordinator")
 
             LOGGER.info("Forming network")
-            await self._ezsp.leaveNetwork()
+            await self._ezsp.leaveNetwork(queue = False)
             await asyncio.sleep(1)  # TODO
             await self.form_network()
 
         await self._policy()
-        nwk = await e.getNodeId()
+        nwk = await e.getNodeId(queue=False)
         self._nwk = nwk[0]
-        ieee = await e.getEui64()
+        ieee = await e.getEui64(queue = False)
         self._ieee = ieee[0]
         self._startup = False
 #        e.add_callback(self.ezsp_callback_handler)
-        asyncio.ensure_future(self._pull_frames())
+#        asyncio.ensure_future(self._pull_frames())
+        e.Run_enable()
+
         await self._read_multicast_table()
 
     async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
@@ -100,7 +102,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             extended_pan_id = t.fixed_list(8, t.uint8_t)([t.uint8_t(0)] * 8)
 
         initial_security_state = bellows.zigbee.util.zha_security(controller=True)
-        v = await self._ezsp.setInitialSecurityState(initial_security_state)
+        v = await self._ezsp.setInitialSecurityState(initial_security_state, queue = False)
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
         parameters = t.EmberNetworkParameters()
@@ -113,11 +115,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         parameters.nwkUpdateId = t.uint8_t(0)
         parameters.channels = t.uint32_t(0)
 
-        await self._ezsp.formNetwork(parameters)
-        await self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1)
+        await self._ezsp.formNetwork(parameters, queue = False)
+        await self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1, queue=False)
 
     async def _cfg(self, config_id, value, optional=False):
-        v = await self._ezsp.setConfigurationValue(config_id, value)
+        v = await self._ezsp.setConfigurationValue(config_id, value, queue=False)
         if not optional:
             assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
@@ -127,16 +129,19 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         v = await e.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
             t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
+            queue = False
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         v = await e.setPolicy(
             t.EzspPolicyId.APP_KEY_REQUEST_POLICY,
             t.EzspDecisionId.ALLOW_APP_KEY_REQUESTS,
+            queue = False
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         v = await e.setPolicy(
             t.EzspPolicyId.TRUST_CENTER_POLICY,
             t.EzspDecisionId.ALLOW_PRECONFIGURED_KEY_JOINS,
+            queue = False
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
@@ -176,8 +181,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 break
             try:
                 self.ezsp_callback_handler(frame_name, args)
-            except Exception as e:
-                LOGGER.debug("%s", e)
+            except:
+                LOGGER.debug("frame handler exception")
 
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:

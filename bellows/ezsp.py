@@ -41,6 +41,9 @@ class EZSP:
             LOGGER.debug("Switching to eszp version %d", result[0])
             await self._command('version', result[0], queue=False)
 
+    def Run_enable(self):
+        self._gw.Run_enable()
+
     def restart(self):
         LOGGER.debug("called restart controller")
         self._store_rec_frame('ControllerRestart', [])
@@ -65,6 +68,10 @@ class EZSP:
     async def _command(self, name, *args, queue = True):
         LOGGER.debug("Send command %s", name)
         data = self._ezsp_frame(name, *args)
+        c = self.COMMANDS[name]
+        future = asyncio.Future()
+        self._awaiting[self._seq] = (c[0], c[2], future)
+        self._seq = (self._seq + 1) % 256
         if queue:
             try:
                 self._gw.data(data)
@@ -73,11 +80,8 @@ class EZSP:
                 return
         else:
                await self._gw.data_noqueue(data)
-        c = self.COMMANDS[name]
-        future = asyncio.Future()
-        self._awaiting[self._seq] = (c[0], c[2], future)
-        self._seq = (self._seq + 1) % 256
-        return future
+        await future
+        return future.result()
 
     async def _list_command(self, name, item_frames, completion_frame, spos, *args):
         """Run a command, returning result callbacks as a list."""
