@@ -43,7 +43,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         await self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
         await self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
-        await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16)
+        await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 32)
         await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 8)
         await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
         await self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
@@ -154,10 +154,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if frame_name == 'incomingMessageHandler':
             self._handle_frame(*args)
         elif frame_name == 'messageSentHandler':
-            if args[4] != t.EmberStatus.SUCCESS:
-                self._handle_frame_failure(*args)
-            else:
-                self._handle_frame_sent(*args)
+#            if args[4] != t.EmberStatus.SUCCESS:
+#                self._handle_frame_failure(*args)
+#            else:
+            self._handle_frame_sent(*args)
         elif frame_name == 'trustCenterJoinHandler':
             if args[2] == t.EmberDeviceUpdate.DEVICE_LEFT:
                 self.handle_leave(args[0], args[1])
@@ -165,6 +165,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 self.handle_join(args[0], args[1], args[4])
         elif frame_name == 'incomingRouteRecordHandler':
             self.handle_RouteRecord(args[0], args[4])
+        elif frame_name == 'incomingRouteErrorHandler':
+            self._handle_incomingRouteErrorHandler(args[0], args[1])
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
@@ -223,6 +225,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def _handle_frame_failure(self, message_type, destination, aps_frame, message_tag, status, message):
         try:
             send_fut, reply_fut = self._pending.pop(message_tag)
+            send_fut.set_result(status)
             send_fut.set_exception(DeliveryError("Message send failure _frame_failure: %s" % (status, )))
             if reply_fut:
                 reply_fut.cancel()
@@ -238,7 +241,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             # If we've already handled the reply, delete pending
             if reply_fut is None or reply_fut.done():
                 self._pending.pop(message_tag)
-            send_fut.set_result(True)
+            send_fut.set_result(status)
         except KeyError:
             LOGGER.warning("Unexpected message send notification")
         except asyncio.futures.InvalidStateError as exc:
@@ -247,10 +250,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def _handle_route_record(self, *args):
         LOGGER.debug("Route Record:%s", args)
 
+    def _handle_incomingRouteErrorHandler(self, status, nwkid):
+        LOGGER.debug("Route Record ERROR:%s:nwkid", status, nwkid)
+
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
-        assert sequence not in self._pending
         LOGGER.debug("pending message queue length: %s", len(self._pending))
+        assert sequence not in self._pending
         send_fut = asyncio.Future()
         reply_fut = None
         if expect_reply:
@@ -269,22 +275,46 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         aps_frame.groupId = t.uint16_t(0)
         aps_frame.sequence = t.uint8_t(sequence)
         LOGGER.debug("sendUnicast to %s:%s:%s", nwk, dst_ep, cluster)
-        v = await self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data)
+        try:
+            v = await asyncio.wait_for(self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data), timeout)
+        except asyncio.TimeoutError:
+            LOGGER.debug("sendunicast uart timeout %s:%s:%s", nwk, dst_ep, cluster)
+            self._pending.pop(sequence)
+            send_fut.cancel()
+            if expect_reply:
+                reply_fut.cancel()
+            raise DeliveryError("Message send failure uart timeout")
         if v[0] != t.EmberStatus.SUCCESS:
             self._pending.pop(sequence)
             send_fut.cancel()
             if expect_reply:
                 reply_fut.cancel()
-            raise DeliveryError("Message send failure _send_unicast_fail %s" % (v[0], ))
+            LOGGER.debug("sendunicast send failure %s:%s:%s=%s", nwk, dst_ep, cluster, v[0])
+            raise DeliveryError("Message send failure _send_unicast_fail")
         try:
-            v = await send_fut
+            v = await asyncio.wait_for(send_fut, timeout)
         except DeliveryError as e:
-            LOGGER.debug("DeliveryError: %s", e)
+            LOGGER.debug("sendunicast send_ACK failure %s:%s:%s", nwk, dst_ep, cluster)
             raise
-        except Exception as e:
-            LOGGER.debug("other Exception: %s", e)
+        except asyncio.TimeoutError:
+            LOGGER.debug("sendunicast messagesend_ACK timeout")
+            self._pending.pop(sequence)
+            if expect_reply:
+                reply_fut.cancel()
+            raise DeliveryError("Message send failure messagesend timeout")
+        if v != t.EmberStatus.SUCCESS:
+            self._pending.pop(sequence)
+            if expect_reply:
+                reply_fut.cancel()
+            LOGGER.debug("sendunicast send_ACK failure %s:%s:%s=%s", nwk, dst_ep, cluster, v)
+            return
         if expect_reply:
-            v = await asyncio.wait_for(reply_fut, timeout)
+            try:
+                v = await asyncio.wait_for(reply_fut, timeout)
+            except asyncio.TimeoutError:
+                LOGGER.debug("sendunicast reply timeout failure %s:%s:%s", nwk, dst_ep, cluster)
+                self._pending.pop(sequence)
+                return
         return v
 
     async def permit(self, time_s=60):

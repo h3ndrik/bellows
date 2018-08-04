@@ -178,6 +178,9 @@ class Gateway(asyncio.Protocol):
             LOGGER.error("Error (%s), reset connection", code.name)
             self._failed_mode = 1
             self._Run_Event.clear()
+            pending, self._pending = self._pending, (-1, None)
+            if pending[1]: 
+                pending[1].set_result(True)
             self._application.restart()
         else:
             LOGGER.debug("Error frame: %s", binascii.hexlify(data))
@@ -212,11 +215,7 @@ class Gateway(asyncio.Protocol):
         """Send queue handler."""
         LOGGER.debug("Start sendq loop")
         while True:
-#            await self._Run_Event.wait()
-            if not self._Run_Event.is_set():
-                await asyncio.sleep(2)
-                LOGGER.debug("send_task blocked")
-                continue 
+            await self._Run_Event.wait() 
             LOGGER.debug("read sendq item")
             item = await self._sendq.get()
             if item is self.Terminator:
@@ -230,7 +229,12 @@ class Gateway(asyncio.Protocol):
                 self._pending = (seq, asyncio.Future())
                 self.write(self._data_frame(item, seq, rxmit))
                 rxmit = 1
-                success = await self._pending[1]
+                try:
+                    success = await asyncio.wait_for( self._pending[1], 2)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    success = True
+                    LOGGER.warn("Timeout for ASH send frame")
+ 
         LOGGER.debug("End sendq loop")
 
     async def data_noqueue(self, item):
