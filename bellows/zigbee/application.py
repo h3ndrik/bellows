@@ -21,16 +21,18 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def __init__(self, ezsp, database_file=None):
         super().__init__(database_file=database_file)
         self._ezsp = ezsp
+
         self._pending = {}
         self._multicast_table = {}
+        self._startup = False
 
     async def initialize(self):
-        """Perform basic NCP initialization steps"""
+        """Perform basic NCP initialization steps."""
         e = self._ezsp
 
         await e.reset()
         await e.version()
-
+        asyncio.ensure_future(self._pull_frames())
         c = t.EzspConfigId
         await self._cfg(c.CONFIG_STACK_PROFILE, 2)
         await self._cfg(c.CONFIG_SECURITY_LEVEL, 5)
@@ -41,7 +43,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         await self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
         await self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
-        await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 16)
+        await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 32)
         await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 8)
         await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
         await self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
@@ -52,34 +54,40 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
 
     async def startup(self, auto_form=False):
-        """Perform a complete application startup"""
+        """Perform a complete application startup."""
+        if self._startup:
+            LOGGER.debug("startup already running")
+            return
+        self._startup = True
         await self.initialize()
         e = self._ezsp
-
-        v = await e.networkInit()
+#        e.remove_callback(self.ezsp_callback_handler)
+        v = await e.networkInit(queue=False)
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
                 raise Exception("Could not initialize network")
             await self.form_network()
 
-        v = await e.getNetworkParameters()
+        v = await e.getNetworkParameters(queue = False)
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         if v[1] != t.EmberNodeType.COORDINATOR:
             if not auto_form:
                 raise Exception("Network not configured as coordinator")
 
             LOGGER.info("Forming network")
-            await self._ezsp.leaveNetwork()
+            await self._ezsp.leaveNetwork(queue = False)
             await asyncio.sleep(1)  # TODO
             await self.form_network()
 
         await self._policy()
-        nwk = await e.getNodeId()
+        nwk = await e.getNodeId(queue=False)
         self._nwk = nwk[0]
-        ieee = await e.getEui64()
+        ieee = await e.getEui64(queue = False)
         self._ieee = ieee[0]
-
-        e.add_callback(self.ezsp_callback_handler)
+        self._startup = False
+#        e.add_callback(self.ezsp_callback_handler)
+#        asyncio.ensure_future(self._pull_frames())
+        e.Run_enable()
 
         await self._read_multicast_table()
 
@@ -94,7 +102,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             extended_pan_id = t.fixed_list(8, t.uint8_t)([t.uint8_t(0)] * 8)
 
         initial_security_state = bellows.zigbee.util.zha_security(controller=True)
-        v = await self._ezsp.setInitialSecurityState(initial_security_state)
+        v = await self._ezsp.setInitialSecurityState(initial_security_state, queue = False)
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
         parameters = t.EmberNetworkParameters()
@@ -107,30 +115,33 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         parameters.nwkUpdateId = t.uint8_t(0)
         parameters.channels = t.uint32_t(0)
 
-        await self._ezsp.formNetwork(parameters)
-        await self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1)
+        await self._ezsp.formNetwork(parameters, queue = False)
+        await self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1, queue=False)
 
     async def _cfg(self, config_id, value, optional=False):
-        v = await self._ezsp.setConfigurationValue(config_id, value)
+        v = await self._ezsp.setConfigurationValue(config_id, value, queue=False)
         if not optional:
             assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
     async def _policy(self):
-        """Set up the policies for what the NCP should do"""
+        """Set up the policies for what the NCP should do."""
         e = self._ezsp
         v = await e.setPolicy(
             t.EzspPolicyId.TC_KEY_REQUEST_POLICY,
             t.EzspDecisionId.DENY_TC_KEY_REQUESTS,
+            queue = False
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         v = await e.setPolicy(
             t.EzspPolicyId.APP_KEY_REQUEST_POLICY,
             t.EzspDecisionId.ALLOW_APP_KEY_REQUESTS,
+            queue = False
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
         v = await e.setPolicy(
             t.EzspPolicyId.TRUST_CENTER_POLICY,
             t.EzspDecisionId.ALLOW_PRECONFIGURED_KEY_JOINS,
+            queue = False
         )
         assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
 
@@ -143,15 +154,37 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if frame_name == 'incomingMessageHandler':
             self._handle_frame(*args)
         elif frame_name == 'messageSentHandler':
-            if args[4] != t.EmberStatus.SUCCESS:
-                self._handle_frame_failure(*args)
-            else:
-                self._handle_frame_sent(*args)
+#            if args[4] != t.EmberStatus.SUCCESS:
+#                self._handle_frame_failure(*args)
+#            else:
+            self._handle_frame_sent(*args)
         elif frame_name == 'trustCenterJoinHandler':
             if args[2] == t.EmberDeviceUpdate.DEVICE_LEFT:
                 self.handle_leave(args[0], args[1])
             else:
                 self.handle_join(args[0], args[1], args[4])
+        elif frame_name == 'incomingRouteRecordHandler':
+            self.handle_RouteRecord(args[0], args[4])
+        elif frame_name == 'incomingRouteErrorHandler':
+            self._handle_incomingRouteErrorHandler(args[0], args[1])
+
+    async def _pull_frames(self):
+        """continously pull frames out of rec queue."""
+        LOGGER.debug("Run receive queue poller")
+        e = self._ezsp
+        while True:
+            frame_name, args = await e.get_rec_frame()
+            LOGGER.debug("pulled %s", frame_name)
+            if frame_name == 'ControllerRestart':
+                LOGGER.debug("call startup and stop polling frames")
+                e.clear_rec_frame()
+                asyncio.ensure_future(self.startup())
+                LOGGER.debug("Exit receive queue poller")
+                break
+            try:
+                self.ezsp_callback_handler(frame_name, args)
+            except:
+                LOGGER.debug("frame handler exception")
 
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:
@@ -192,6 +225,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def _handle_frame_failure(self, message_type, destination, aps_frame, message_tag, status, message):
         try:
             send_fut, reply_fut = self._pending.pop(message_tag)
+            send_fut.set_result(status)
             send_fut.set_exception(DeliveryError("Message send failure _frame_failure: %s" % (status, )))
             if reply_fut:
                 reply_fut.cancel()
@@ -207,14 +241,21 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             # If we've already handled the reply, delete pending
             if reply_fut is None or reply_fut.done():
                 self._pending.pop(message_tag)
-            send_fut.set_result(True)
+            send_fut.set_result(status)
         except KeyError:
             LOGGER.warning("Unexpected message send notification")
         except asyncio.futures.InvalidStateError as exc:
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
 
+    def _handle_route_record(self, *args):
+        LOGGER.debug("Route Record:%s", args)
+
+    def _handle_incomingRouteErrorHandler(self, status, nwkid):
+        LOGGER.debug("Route Record ERROR:%s:nwkid", status, nwkid)
+
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
+        LOGGER.debug("pending message queue length: %s", len(self._pending))
         assert sequence not in self._pending
         send_fut = asyncio.Future()
         reply_fut = None
@@ -233,23 +274,47 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         aps_frame.groupId = t.uint16_t(0)
         aps_frame.sequence = t.uint8_t(sequence)
-
-        v = await self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data)
+        LOGGER.debug("sendUnicast to %s:%s:%s", nwk, dst_ep, cluster)
+        try:
+            v = await asyncio.wait_for(self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data), timeout)
+        except asyncio.TimeoutError:
+            LOGGER.debug("sendunicast uart timeout %s:%s:%s", nwk, dst_ep, cluster)
+            self._pending.pop(sequence)
+            send_fut.cancel()
+            if expect_reply:
+                reply_fut.cancel()
+            raise DeliveryError("Message send failure uart timeout")
         if v[0] != t.EmberStatus.SUCCESS:
             self._pending.pop(sequence)
             send_fut.cancel()
             if expect_reply:
                 reply_fut.cancel()
-            raise DeliveryError("Message send failure _send_unicast_fail %s" % (v[0], ))
+            LOGGER.debug("sendunicast send failure %s:%s:%s=%s", nwk, dst_ep, cluster, v[0])
+            raise DeliveryError("Message send failure _send_unicast_fail")
         try:
-            v = await send_fut
+            v = await asyncio.wait_for(send_fut, timeout)
         except DeliveryError as e:
-            LOGGER.debug("DeliveryError: %s", e)
+            LOGGER.debug("sendunicast send_ACK failure %s:%s:%s", nwk, dst_ep, cluster)
             raise
-        except Exception as e:
-            LOGGER.debug("other Exception: %s", e)
+        except asyncio.TimeoutError:
+            LOGGER.debug("sendunicast messagesend_ACK timeout")
+            self._pending.pop(sequence)
+            if expect_reply:
+                reply_fut.cancel()
+            raise DeliveryError("Message send failure messagesend timeout")
+        if v != t.EmberStatus.SUCCESS:
+            self._pending.pop(sequence)
+            if expect_reply:
+                reply_fut.cancel()
+            LOGGER.debug("sendunicast send_ACK failure %s:%s:%s=%s", nwk, dst_ep, cluster, v)
+            return
         if expect_reply:
-            v = await asyncio.wait_for(reply_fut, timeout)
+            try:
+                v = await asyncio.wait_for(reply_fut, timeout)
+            except asyncio.TimeoutError:
+                LOGGER.debug("sendunicast reply timeout failure %s:%s:%s", nwk, dst_ep, cluster)
+                self._pending.pop(sequence)
+                return
         return v
 
     async def permit(self, time_s=60):
@@ -281,7 +346,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         return self._ezsp.permitJoining(time_s, True)
 
     async def send_zdo_broadcast(self, command, grpid, radius, args):
-        """ create aps_frame for zdo broadcast"""
+        """ create aps_frame for zdo broadcast."""
         aps_frame = t.EmberApsFrame()
         aps_frame.profileId = t.uint16_t(0x0000)        # 0 for zdo
         aps_frame.clusterId = t.uint16_t(command)
@@ -300,7 +365,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._ezsp.sendBroadcast(0xfffd, aps_frame, radius, len(data), data)
 
     async def subscribe_group(self, group_id):
-        # check if already subscribed, if not find a free entry and subscribe group_id
+        """check if already subscribed, if not find a free entry and subscribe group_id."""
 
         e = self._ezsp
         index = None

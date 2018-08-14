@@ -16,9 +16,12 @@ class EZSP:
     ezsp_version = 4
 
     def __init__(self):
+        self._restart = 0
+        self.app_restart = None
         self._callbacks = {}
         self._seq = 0
         self._gw = None
+        self.recq = asyncio.Queue()
         self._awaiting = {}
         self.COMMANDS_BY_ID = {}
         for name, details in self.COMMANDS.items():
@@ -33,10 +36,17 @@ class EZSP:
 
     async def version(self):
         version = self.ezsp_version
-        result = await self._command('version', version)
+        result = await self._command('version', version, queue=False)
         if result[0] != version:
             LOGGER.debug("Switching to eszp version %d", result[0])
-            await self._command('version', result[0])
+            await self._command('version', result[0], queue=False)
+
+    def Run_enable(self):
+        self._gw.Run_enable()
+
+    def restart(self):
+        LOGGER.debug("called restart controller")
+        self._store_rec_frame('ControllerRestart', [])
 
     def close(self):
         return self._gw.close()
@@ -55,18 +65,26 @@ class EZSP:
 
         return bytes(frame) + data
 
-    def _command(self, name, *args):
+    async def _command(self, name, *args, queue = True):
         LOGGER.debug("Send command %s", name)
         data = self._ezsp_frame(name, *args)
-        self._gw.data(data)
         c = self.COMMANDS[name]
         future = asyncio.Future()
         self._awaiting[self._seq] = (c[0], c[2], future)
         self._seq = (self._seq + 1) % 256
-        return future
+        if queue:
+            try:
+                self._gw.data(data)
+            except Exception as e:
+                LOGGER.debug("catched:%s", e)
+                return
+        else:
+               await self._gw.data_noqueue(data)
+        await future
+        return future.result()
 
     async def _list_command(self, name, item_frames, completion_frame, spos, *args):
-        """Run a command, returning result callbacks as a list"""
+        """Run a command, returning result callbacks as a list."""
         fut = asyncio.Future()
         results = []
 
@@ -144,11 +162,12 @@ class EZSP:
         return functools.partial(self._command, name)
 
     def frame_received(self, data):
-        """Handle a received EZSP frame
+        """Handle a received EZSP frame.
 
         The protocol has taken care of UART specific framing etc, so we should
         just have EZSP application stuff here, with all escaping/stuffing and
         data randomization removed.
+
         """
         sequence, frame_id, data = data[0], data[2], data[3:]
         if frame_id == 0xFF:
@@ -174,9 +193,21 @@ class EZSP:
             frame_name = self.COMMANDS_BY_ID[frame_id][0]
             result, data = t.deserialize(data, schema)
             self.handle_callback(frame_name, result)
+            self._store_rec_frame(frame_name, result)
 
         if frame_id == 0x00:
             self.ezsp_version = result[0]
+
+    def _store_rec_frame(self, *item):
+        return self.recq.put_nowait(tuple(item))
+
+    def clear_rec_frame(self):
+        while not self.recq.empty():
+            self.recq.get_nowait()
+        LOGGER.debug("cleared receive queue")
+
+    async def get_rec_frame(self):
+        return await self.recq.get()
 
     def add_callback(self, cb):
         id_ = hash(cb)
@@ -186,7 +217,7 @@ class EZSP:
         return id_
 
     def remove_callback(self, id_):
-        return self._callbacks.pop(id_)
+        return self._callbacks.pop(id_, None)
 
     def handle_callback(self, *args):
         for callback_id, handler in self._callbacks.items():
