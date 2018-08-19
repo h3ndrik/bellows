@@ -216,7 +216,7 @@ class Gateway(asyncio.Protocol):
         LOGGER.debug("Start sendq loop")
         while True:
             await self._Run_Event.wait() 
-            LOGGER.debug("read sendq item")
+#            LOGGER.debug("read sendq item")
             item = await self._sendq.get()
             if item is self.Terminator:
                 break
@@ -242,16 +242,19 @@ class Gateway(asyncio.Protocol):
          self._send_seq = (seq + 1) % 8
          rxmit = 0
          self._pending = (seq, asyncio.Future())
-         LOGGER.debug("write noqueue: %s", seq)
+#         LOGGER.debug("write noqueue: %s", seq)
          self.write(self._data_frame(item, seq, rxmit))
-         success = await self._pending[1]
+         await self._pending[1]
 
     def _handle_ack(self, control):
         """Handle an acknowledgement frame."""
         ack = ((control & 0b00000111) - 1) % 8
         if ack == self._pending[0]:
             pending, self._pending = self._pending, (-1, None)
-            pending[1].set_result(True)
+            try:
+                pending[1].set_result(True)
+            except:
+                pass
 
     def _handle_nak(self, control):
         """Handle negative acknowledgment frame."""

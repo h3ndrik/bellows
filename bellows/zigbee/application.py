@@ -29,6 +29,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def initialize(self):
         """Perform basic NCP initialization steps."""
         e = self._ezsp
+        await asyncio.sleep(1)
 
         await e.reset()
         await e.version()
