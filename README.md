@@ -1,4 +1,10 @@
-uptodate with 0.5.1 with some  additional extensions
+# New
+* changed to asyncio.queue for received frames, 
+* on uart error detection for ack timeout restart uart communication
+* catch more exceptions and handle them
+* detect better retransmits, check if they were already handled and drop them, less duplicates messages for zha
+
+* uptodate with 0.5.1 with some  additional extensions
 # bellows
 
 [![Build Status](https://travis-ci.org/zigpy/bellows.svg?branch=master)](https://travis-ci.org/zigpy/bellows)
