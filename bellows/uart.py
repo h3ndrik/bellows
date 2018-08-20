@@ -220,7 +220,7 @@ class Gateway(asyncio.Protocol):
             item = await self._sendq.get()
             if item is self.Terminator:
                 break
-            self.data_noqueue(item)
+            await self.data_noqueue(item)
         LOGGER.debug("End sendq loop")
 
     async def data_noqueue(self, item):
