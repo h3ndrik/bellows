@@ -252,7 +252,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         LOGGER.debug("Route Record:%s", args)
 
     def _handle_incomingRouteErrorHandler(self, status, nwkid):
-        LOGGER.debug("Route Record ERROR:%s:nwkid", status, nwkid)
+        LOGGER.debug("Route Record ERROR:%s:%s", status, nwkid)
 
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
