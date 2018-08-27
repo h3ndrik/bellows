@@ -176,7 +176,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         e = self._ezsp
         while True:
             frame_name, args = await e.get_rec_frame()
-            LOGGER.debug("pulled %s", frame_name)
+#            LOGGER.debug("pulled %s", frame_name)
             if frame_name == 'ControllerRestart':
                 LOGGER.debug("call startup and stop polling frames")
                 e.clear_rec_frame()
@@ -257,7 +257,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
-        LOGGER.debug("pending message queue length: %s", len(self._pending))
+#        LOGGER.debug("pending message queue length: %s", len(self._pending))
         assert sequence not in self._pending
         send_fut = asyncio.Future()
         reply_fut = None
@@ -423,7 +423,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._neighbor_table["index"] =  list()
         while True:
             (state, NeighborTableEntry) = await e.getNeighbor(entry_id)
-            LOGGER.debug("read neighbor entry %s status %s: %s", entry_id, state, NeighborTableEntry)
+#            LOGGER.debug("read neighbor entry %s status %s: %s", entry_id, state, NeighborTableEntry)
             if state == t.EmberStatus.SUCCESS:
                 self._neighbor_table[NeighborTableEntry.shortId] = NeighborTableEntry
                 self._neighbor_table["index"].append(NeighborTableEntry.shortId)
