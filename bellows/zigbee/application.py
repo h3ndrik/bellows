@@ -276,11 +276,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         aps_frame.groupId = t.uint16_t(0)
         aps_frame.sequence = t.uint8_t(sequence)
-        LOGGER.debug("sendUnicast to %s:%s:%s", nwk, dst_ep, cluster)
+        LOGGER.debug("sendUnicast to 0x%04x:%s:0x%04x", nwk, dst_ep, cluster)
         try:
             v = await asyncio.wait_for(self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data), timeout)
         except asyncio.TimeoutError:
-            LOGGER.debug("sendunicast uart timeout %s:%s:%s", nwk, dst_ep, cluster)
+            LOGGER.debug("sendunicast uart timeout 0x%04x:%s:0x%04x", nwk, dst_ep, cluster)
             self._pending.pop(sequence)
             send_fut.cancel()
             if expect_reply:
@@ -291,12 +291,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             send_fut.cancel()
             if expect_reply:
                 reply_fut.cancel()
-            LOGGER.debug("sendunicast send failure %s:%s:%s=%s", nwk, dst_ep, cluster, v[0])
+            LOGGER.debug("sendunicast send failure 0x%04x:%s:0x%04x=%s", nwk, dst_ep, cluster, v[0])
             raise DeliveryError("Message send failure _send_unicast_fail")
         try:
             v = await asyncio.wait_for(send_fut, timeout)
         except DeliveryError as e:
-            LOGGER.debug("sendunicast send_ACK failure %s:%s:%s", nwk, dst_ep, cluster)
+            LOGGER.debug("sendunicast send_ACK failure 0x%04x:%s:0x%04x", nwk, dst_ep, cluster)
             raise
         except asyncio.TimeoutError:
             LOGGER.debug("sendunicast messagesend_ACK timeout")
@@ -308,15 +308,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._pending.pop(sequence)
             if expect_reply:
                 reply_fut.cancel()
-            LOGGER.debug("sendunicast send_ACK failure %s:%s:%s=%s", nwk, dst_ep, cluster, v)
-            return
+            LOGGER.debug("sendunicast send_ACK failure 0x%04x:%s:0x%04x=%s", nwk, dst_ep, cluster, v)
+            raise DeliveryError("sendunicast send_ACK failure")
         if expect_reply:
             try:
                 v = await asyncio.wait_for(reply_fut, timeout)
             except asyncio.TimeoutError:
-                LOGGER.debug("sendunicast reply timeout failure %s:%s:%s", nwk, dst_ep, cluster)
+                LOGGER.debug("sendunicast reply timeout failure 0x%04x:%s:0x%04x", nwk, dst_ep, cluster)
                 self._pending.pop(sequence)
-                return
+                raise DeliveryError("sendunicast reply timeout error")
         return v
 
     async def permit(self, time_s=60):
@@ -422,8 +422,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._neighbor_table = dict()
         self._neighbor_table["index"] =  list()
         while True:
-            (state, NeighborTableEntry) = await e.getNeighbor(entry_id)
-#            LOGGER.debug("read neighbor entry %s status %s: %s", entry_id, state, NeighborTableEntry)
+            try:
+                (state, NeighborTableEntry) = await e.getNeighbor(entry_id)
+            except DeliveryError:
+                return
             if state == t.EmberStatus.SUCCESS:
                 self._neighbor_table[NeighborTableEntry.shortId] = NeighborTableEntry
                 self._neighbor_table["index"].append(NeighborTableEntry.shortId)
