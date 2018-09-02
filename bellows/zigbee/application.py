@@ -22,9 +22,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         super().__init__(database_file=database_file)
         self._ezsp = ezsp
 
-        self._pending = {}
-        self._multicast_table = {}
-        self._neighbor_table = {}
+        self._pending = dict()
+        self._multicast_table = dict()
+        self._neighbor_table = dict()
+        self._child_table = dict()
         self._startup = False
 
     async def initialize(self):
@@ -402,7 +403,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         entry_id = 0
         while True:
             (state, MulticastTableEntry) = await e.getMulticastTableEntry(entry_id)
-            LOGGER.debug("read multicast entry %s status %s: %s", entry_id, state, MulticastTableEntry)
+#            LOGGER.debug("read multicast entry %s status %s: %s", entry_id, state, MulticastTableEntry)
             if state == t.EmberStatus.SUCCESS:
                 self._multicast_table[entry_id] = MulticastTableEntry
 #                if MulticastTableEntry.endpoint:
@@ -410,17 +411,17 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             else:
                 break
             entry_id += 1
-    
+
     def get_neighbor(self, nwkId):
         if nwkId in self._neighbor_table["index"]:
             return self._neighbor_table.get(nwkId, None)
-        
+
     async def read_neighbor_table(self):
         # initialize copy of neighbor table, keep a copy in memory to speed up r/w
         e = self._ezsp
         entry_id = 0
         self._neighbor_table = dict()
-        self._neighbor_table["index"] =  list()
+        self._neighbor_table["index"] = list()
         while True:
             try:
                 (state, NeighborTableEntry) = await e.getNeighbor(entry_id)
@@ -432,7 +433,27 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             else:
                 break
             entry_id += 1
-        return self._neighbor_table["index"]  
+        return self._neighbor_table["index"]
+
+    async def read_child_table(self):
+        """initialize copy of child table. """
+        e = self._ezsp
+        entry_id = 0
+        self._child_table = dict()
+        self._child_table["index"] = list()
+        while True:
+            try:
+                (state, ChildTableEntry) = await e.getChildData(entry_id)
+            except DeliveryError:
+                return
+            LOGGER.debug("ChildTable, %s", ChildTableEntry)
+            if state == t.EmberStatus.SUCCESS:
+                self._child_table[ChildTableEntry.id] = ChildTableEntry
+                self._child_table["index"].append(ChildTableEntry.id)
+            else:
+                break
+            entry_id += 1
+        return self._child_table["index"]
 
     async def _write_multicast_table(self):
         # write copy to NCP

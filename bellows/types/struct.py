@@ -303,6 +303,32 @@ class EmberRouteTableEntry(EzspStruct):
     ]
 
 
+class EmberChildData(EzspStruct):
+    # A structure containing a child node's data
+    _fields = [
+        # The EUI64 of the child
+        ('eui64', named.EmberEUI64),
+        # The node type
+        ('type', named.EmberNodeType),
+        # The short address of the child
+        ('id', named.EmerNodeId),
+        # The phy of the child
+        ('phy', basic.uint8_t),
+        # The power of the child
+        ('power', basic.uint8_t),
+        # The timeout of the child
+        ('timeout', basic.uint8_t),
+        # The GPD's EUI64.
+        ('gpdIeeeAddress', named.EmberEUI64),
+        # The GPD's source ID.
+        ('sourceId', basic.uint32_t),
+        # The GPD Application ID.
+        ('applicationId', basic.uint8_t),
+        # The GPD endpoint.
+        ('endpoint', basic.uint8_t),
+    ]
+
+
 class EmberInitialSecurityState(EzspStruct):
     # The security data used to set the configuration for the stack, or the
     # retrieved configuration currently in use.
