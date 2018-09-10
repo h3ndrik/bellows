@@ -26,6 +26,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._multicast_table = dict()
         self._neighbor_table = dict()
         self._child_table = dict()
+        self._route_table = dict()
+        self._route_table_size = 0
         self._startup = False
 
     async def initialize(self):
@@ -47,14 +49,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
         await self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
         await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 32)
-        await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 8)
-        await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 32)
+        await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 0)
+        await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 16)
         await self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
         await self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
         await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
         await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 6)
         await self._cfg(c.CONFIG_APS_UNICAST_MESSAGE_COUNT, 20)
         await self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
+        self._route_table_size = await self._get(c.CONFIG_ROUTE_TABLE_SIZE)
 
     async def startup(self, auto_form=False):
         """Perform a complete application startup."""
@@ -125,6 +128,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         v = await self._ezsp.setConfigurationValue(config_id, value, queue=False)
         if not optional:
             assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
+
+    async def _get(self, config_id, optional=False):
+        v = await self._ezsp.getConfigurationValue(config_id, queue=False)
+        if not optional:
+            assert v[0] == t.EmberStatus.SUCCESS  # TODO: Better check
+        return v[1]
 
     async def _policy(self):
         """Set up the policies for what the NCP should do."""
@@ -437,23 +446,46 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     async def read_child_table(self):
         """initialize copy of child table. """
+        
+        LOGGER.debug("ReadingChildTable")
         e = self._ezsp
         entry_id = 0
         self._child_table = dict()
         self._child_table["index"] = list()
-        while True:
+        result = await e.getParentChildParameters()
+        LOGGER.debug("ChildParameters, %s", result)
+        if result[0] == 0:
+            return
+        while entry_id <32:
             try:
-                (state, ChildTableEntry) = await e.getChildData(entry_id)
+                result = await e.getChildData(entry_id)
             except DeliveryError:
-                return
-            LOGGER.debug("ChildTable, %s", ChildTableEntry)
-            if state == t.EmberStatus.SUCCESS:
-                self._child_table[ChildTableEntry.id] = ChildTableEntry
-                self._child_table["index"].append(ChildTableEntry.id)
-            else:
-                break
+                raise
+            LOGGER.debug("ChildTable, %s", result)
+#           if result[0] == t.EmberStatus.SUCCESS:
+ #               self._child_table[ChildTableEntry.id] = ChildTableEntry
+ #               self._child_table["index"].append(ChildTableEntry.id)
+ #           else:
+ #               break
             entry_id += 1
-        return self._child_table["index"]
+ #       return self._child_table["index"]
+
+    async def read_route_table(self):
+        LOGGER.debug("Reading RouteTable")
+        e = self._ezsp
+        entry_id = 0
+        self._route_table = dict()
+        self._route_table["index"] = dict()
+        while entry_id < self._route_table_size:
+            try:
+                result = await e.getRouteTableEntry(entry_id)
+            except DeliveryError:
+                raise
+            LOGGER.debug("RouteTable(%s) %s", entry_id, result)
+            self._route_table[entry_id] = result[1]
+            if not result[1].nextHop == 0:
+                self._route_table["index"][result[1].destination]=entry_id
+            entry_id += 1
 
     async def _write_multicast_table(self):
         # write copy to NCP

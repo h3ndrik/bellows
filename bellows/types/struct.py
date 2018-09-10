@@ -311,7 +311,7 @@ class EmberChildData(EzspStruct):
         # The node type
         ('type', named.EmberNodeType),
         # The short address of the child
-        ('id', named.EmerNodeId),
+        ('id', named.EmberNodeId),
         # The phy of the child
         ('phy', basic.uint8_t),
         # The power of the child

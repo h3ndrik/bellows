@@ -66,7 +66,7 @@ COMMANDS = {
     'energyScanRequest': (0x9C, (t.EmberNodeId, t.uint32_t, t.uint8_t, t.uint16_t), (t.EmberStatus, )),
     'getNetworkParameters': (0x28, (), (t.EmberStatus, t.EmberNodeType, t.EmberNetworkParameters)),
     'getParentChildParameters': (0x29, (), (t.uint8_t, t.EmberEUI64, t.EmberNodeId)),
-    'getChildData': (0x4A, (t.uint8_t, ), (t.EmberStatus, t.EmberNodeId, t.EmberEUI64, t.EmberNodeType)),
+    'getChildData': (0x4A, (t.uint8_t, ), (t.EmberStatus, t.EmberChildData)),
     'getNeighbor': (0x79, (t.uint8_t, ), (t.EmberStatus, t.EmberNeighborTableEntry)),
     'neighborCount': (0x7A, (), (t.uint8_t, )),
     'getRouteTableEntry': (0x7B, (t.uint8_t, ), (t.EmberStatus, t.EmberRouteTableEntry)),
