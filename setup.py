@@ -4,11 +4,11 @@ from setuptools import find_packages, setup
 
 setup(
     name="bellows",
-    version="0.7.0-Y",
+    version="0.7.3-Y-pre",
     description="Library implementing EZSP",
-    url="http://github.com/zigpy/bellows",
-    author="Russell Cloran",
-    author_email="rcloran@gmail.com",
+    url="http://github.com/Yoda-x/bellows",
+    author="orig by Russell Cloran",
+#    author_email="rcloran@gmail.com",
     license="GPL-3.0",
     packages=find_packages(exclude=['*.tests']),
     entry_points={
@@ -19,10 +19,11 @@ setup(
         'click-log==0.2.0',
         'pure_pcapy3==1.0.1',
         'pyserial-asyncio',
-        'zigpy',
+#        'zigpy=0.1.3-Y-pre'
     ],
     dependency_links=[
         'https://github.com/rcloran/pure-pcapy-3/archive/e289c7d7566306dc02d8f4eb30c0358b41f40f26.zip#egg=pure_pcapy3-1.0.1',
+#        'https://github.com/Yoda-x/zigpy/archive/0.1.3-Y-pre.zip#egg=zigpy-0.1.3-Y-pre'
     ],
     tests_require=[
         'pytest',

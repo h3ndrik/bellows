@@ -27,6 +27,9 @@ class EZSP:
         for name, details in self.COMMANDS.items():
             self.COMMANDS_BY_ID[details[0]] = (name, details[1], details[2])
 
+    def status(self):
+        return self._gw.status()
+
     async def connect(self, device, baudrate):
         assert self._gw is None
         self._gw = await uart.connect(device, baudrate, self)
@@ -37,6 +40,7 @@ class EZSP:
     async def version(self):
         version = self.ezsp_version
         result = await self._command('version', version, queue=False)
+        LOGGER.info("EMBER Stack version 0x%04x:", result[2])
         if result[0] != version:
             LOGGER.debug("Switching to eszp version %d", result[0])
             await self._command('version', result[0], queue=False)

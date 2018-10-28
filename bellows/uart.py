@@ -46,6 +46,12 @@ class Gateway(asyncio.Protocol):
         self._Run_Event.set()
         self._task_send_task = None
 
+    def status(self):
+        return [self._failed_mode, 
+                self._task_send_task.done(),
+                not self._Run_Event.is_set(),
+               ] 
+
     def connection_made(self, transport):
         """Callback when the uart is connected."""
         self._transport = transport
@@ -81,7 +87,7 @@ class Gateway(asyncio.Protocol):
         return None, data
 
     def frame_received(self, data):
-        LOGGER.debug("Status _send_task.done: %s",self._task_send_task.done())
+        LOGGER.debug("Status _send_task.done: %s", self._task_send_task.done())
         """Frame receive handler."""
         if (data[0] & 0b10000000) == 0:
             self.data_frame_received(data)
@@ -179,7 +185,7 @@ class Gateway(asyncio.Protocol):
             self._failed_mode = 1
             self._Run_Event.clear()
             pending, self._pending = self._pending, (-1, None)
-            if pending[1]: 
+            if pending[1]:
                 pending[1].set_result(True)
             self._application.restart()
         else:
@@ -215,36 +221,32 @@ class Gateway(asyncio.Protocol):
         """Send queue handler."""
         LOGGER.debug("Start sendq loop")
         while True:
-            await self._Run_Event.wait() 
+            await self._Run_Event.wait()
 #            LOGGER.debug("read sendq item")
             item = await self._sendq.get()
             if item is self.Terminator:
                 break
-            seq = self._send_seq
-            self._send_seq = (seq + 1) % 8
-            success = False
-            rxmit = 0
-            self._tx_buffer[seq] = item
-            while not success:
-                self._pending = (seq, asyncio.Future())
-                self.write(self._data_frame(item, seq, rxmit))
-                rxmit = 1
-                try:
-                    success = await asyncio.wait_for( self._pending[1], 2)
-                except (asyncio.TimeoutError, asyncio.CancelledError):
-                    success = True
-                    LOGGER.warn("Timeout for ASH send frame")
- 
+            await self.data_noqueue(item)
         LOGGER.debug("End sendq loop")
 
     async def data_noqueue(self, item):
-         seq = self._send_seq
-         self._send_seq = (seq + 1) % 8
-         rxmit = 0
-         self._pending = (seq, asyncio.Future())
-#         LOGGER.debug("write noqueue: %s", seq)
-         self.write(self._data_frame(item, seq, rxmit))
-         await self._pending[1]
+        seq = self._send_seq
+        self._send_seq = (seq + 1) % 8
+        success = False
+        rxmit = 0
+        self._tx_buffer[seq] = item
+        while not success:
+            self._pending = (seq, asyncio.Future())
+            self.write(self._data_frame(item, seq, rxmit))
+            rxmit = 1
+            try:
+                success = await asyncio.wait_for(self._pending[1], 2)
+            except asyncio.TimeoutError:
+                success = True
+                LOGGER.warn("Timeout for ASH send frame")
+            except asyncio.CancelledError:
+                success = True
+                LOGGER.warn("future canceled for ASH send frame")
 
     def _handle_ack(self, control):
         """Handle an acknowledgement frame."""
@@ -338,6 +340,7 @@ class Gateway(asyncio.Protocol):
     def Run_enable(self):
         self._Run_Event.set()
         LOGGER.debug("enable run")
+
 
 async def connect(port, baudrate, application, loop=None):
     if loop is None:

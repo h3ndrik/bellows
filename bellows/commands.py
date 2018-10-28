@@ -7,7 +7,8 @@ COMMANDS = {
     'setConfigurationValue': (0x53, (t.EzspConfigId, t.uint16_t), (t.EzspStatus, )),
     # TODO: Last four fields are length, length, array, array. Need some
     #       composite type to handle that.
-    # 'addEndpoint': (0x02, 'BHHBBBYY', 'b'),
+    'addEndpoint': (0x02, (t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t,
+                           t.uint8_t, t.uint8_t, t.List(t.uint16_t), t.List(t.uint16_t)), (t.EzspStatus)),
     'setPolicy': (0x55, (t.EzspPolicyId, t.EzspDecisionId), (t.EzspStatus, )),
     'getPolicy': (0x56, (t.EzspPolicyId, ), (t.EzspStatus, t.EzspDecisionId)),
     'getValue': (0xAA, (t.EzspValueId, ), (t.EzspStatus, t.LVBytes)),
@@ -66,7 +67,7 @@ COMMANDS = {
     'energyScanRequest': (0x9C, (t.EmberNodeId, t.uint32_t, t.uint8_t, t.uint16_t), (t.EmberStatus, )),
     'getNetworkParameters': (0x28, (), (t.EmberStatus, t.EmberNodeType, t.EmberNetworkParameters)),
     'getParentChildParameters': (0x29, (), (t.uint8_t, t.EmberEUI64, t.EmberNodeId)),
-    'getChildData': (0x4A, (t.uint8_t, ), (t.EmberStatus, t.EmberNodeId, t.EmberEUI64, t.EmberNodeType)),
+    'getChildData': (0x4A, (t.uint8_t, ), (t.EmberStatus, t.EmberChildData)),
     'getNeighbor': (0x79, (t.uint8_t, ), (t.EmberStatus, t.EmberNeighborTableEntry)),
     'neighborCount': (0x7A, (), (t.uint8_t, )),
     'getRouteTableEntry': (0x7B, (t.uint8_t, ), (t.EmberStatus, t.EmberRouteTableEntry)),
