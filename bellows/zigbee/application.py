@@ -52,8 +52,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                             LOGGER.info("watchdog: startup terminated, catched Cancelled")
                     self._startup = False
                     self._startup_task = asyncio.ensure_future(self._startup())
-            except:
-                LOGGER.debug("watchdog: catched exeption")
+            except Exception as e:
+                LOGGER.debug("watchdog: catched %s",  e)
 
     async def initialize(self):
         """Perform basic NCP initialization steps."""
@@ -74,7 +74,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
         await self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
         await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 32)
-        await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 0)
+        await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 16)
         await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 16)
         await self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
         await self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
