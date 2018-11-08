@@ -52,8 +52,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                             LOGGER.info("watchdog: startup terminated, catched Cancelled")
                     self._startup = False
                     self._startup_task = asyncio.ensure_future(self._startup())
-            except:
-                LOGGER.debug("watchdog: catched exeption")
+            except Exception as e:
+                LOGGER.debug("watchdog: catched %s",  e)
 
     async def initialize(self):
         """Perform basic NCP initialization steps."""
