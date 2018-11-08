@@ -140,7 +140,7 @@ class EZSP:
         0,
     )
 
-    async def formNetwork(self, parameters):  # noqa: N802
+    async def formNetwork(self, parameters, queue=True):  # noqa: N802
         fut = asyncio.Future()
 
         def cb(frame_name, response):
@@ -149,7 +149,7 @@ class EZSP:
                 fut.set_result(response)
 
         self.add_callback(cb)
-        v = await self._command('formNetwork', parameters)
+        v = await self._command('formNetwork', parameters, queue=queue)
         if v[0] != t.EmberStatus.SUCCESS:
             raise Exception("Failure forming network: %s" % (v, ))
 
