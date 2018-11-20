@@ -1,4 +1,4 @@
-"""CLI commands which use the application framework"""
+"""CLI commands which use the application framework."""
 
 import asyncio
 import binascii
@@ -80,7 +80,7 @@ async def permit_with_key(ctx, database, duration_s, node, code):
 @opts.database_file
 @click.pass_context
 def devices(ctx, database):
-    """Show device database"""
+    """Show device database."""
 
     def print_clusters(title, clusters):
         clusters = sorted(list(clusters.items()))
@@ -120,7 +120,7 @@ def devices(ctx, database):
 @opts.database_file
 @click.argument('node', type=util.ZigbeeNodeParamType())
 def zdo(ctx, node, database):
-    """Perform ZDO operations against a device"""
+    """Perform ZDO operations against a device."""
     ctx.obj['node'] = node
     ctx.obj['database_file'] = database
 
@@ -218,7 +218,7 @@ async def leave(ctx):
 @click.argument('endpoint', type=click.IntRange(1, 255))
 @click.argument('cluster', type=click.IntRange(0, 65535))
 def zcl(ctx, database, node, cluster, endpoint):
-    """Peform ZCL operations against a device"""
+    """Peform ZCL operations against a device."""
     ctx.obj['database_file'] = database
     ctx.obj['node'] = node
     ctx.obj['endpoint'] = endpoint
