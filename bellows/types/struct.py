@@ -611,6 +611,7 @@ class EmberGpSinkListEntry(EzspStruct):
         ('sinkNodeId', named.EmberNodeId),
     ]
 
+
 class EmberEndpoint(EzspStruct):
     # Ember endpoint
     _fields = [
