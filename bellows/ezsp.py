@@ -69,7 +69,7 @@ class EZSP:
 
         return bytes(frame) + data
 
-    async def _command(self, name, *args, queue = True):
+    async def _command(self, name, *args, queue=True):
         LOGGER.debug("Send command %s", name)
         data = self._ezsp_frame(name, *args)
         c = self.COMMANDS[name]
@@ -83,7 +83,7 @@ class EZSP:
                 LOGGER.debug("catched:%s", e)
                 return
         else:
-               await self._gw.data_noqueue(data)
+            await self._gw.data_noqueue(data)
         await future
         return future.result()
 

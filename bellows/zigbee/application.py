@@ -1,4 +1,7 @@
-import asyncio, binascii, logging, os
+import asyncio
+import binascii
+import logging
+import os
 from zigpy.exceptions import DeliveryError
 import zigpy.application
 import zigpy.device
@@ -30,10 +33,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     def status(self):
         return [self._ezsp.status(), [
-                   self._startup, 
+                   self._startup,
                    self._watchdog_task.done(),
                    self._pull_frames_task.done()]
-               ]
+                ]
 
     async def _watchdog(self, wakemeup=60):
         """run in background, checks if uart restart hangs and restart as needed."""
@@ -41,8 +44,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             try:
                 await asyncio.sleep(wakemeup)
                 LOGGER.debug("watchdog: running")
-                if self._startup:
-                    LOGGER.error("watchdog: startup running, restart ")
+                if self._startup or bool(sum(self._ezsp.status())):
+                    LOGGER.error("watchdog: startup running or failed uart restart ")
                     if self._startup_task and not self._startup_task.done():
                         self._startup_task.cancel()
                         LOGGER.info("watchdog: cancel startup task ")
@@ -53,7 +56,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                     self._startup = False
                     self._startup_task = asyncio.ensure_future(self._startup())
             except Exception as e:
-                LOGGER.debug("watchdog: catched %s",  e)
+                LOGGER.info("watchdog: catched %s",  e)
 
     async def initialize(self):
         """Perform basic NCP initialization steps."""
@@ -265,7 +268,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         except KeyError:
             LOGGER.warning("0x%04x:%s:0x%04x Unexpected response TSN=%s command=%s args=%s ",
                            sender.nwk, aps_frame.sourceEndpoint, aps_frame.clusterId,
-                           tsn, command_id, args )
+                           tsn, command_id, args)
         except asyncio.futures.InvalidStateError as exc:
             LOGGER.debug("Invalid state on future - probably duplicate response: %s", exc)
             # We've already handled, don't drop through to device handler

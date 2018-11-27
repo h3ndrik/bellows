@@ -150,7 +150,7 @@ async def network_init(s):
 
 
 def parse_epan(epan):
-    """Parse a user specified extended PAN ID"""
+    """Parse a user specified extended PAN ID."""
     epan_list = [t.uint8_t(x, 16) for x in epan.split(":")]
     return t.fixed_list(8, t.uint8_t)(epan_list)
 

@@ -23,7 +23,7 @@ from .main import main
 )
 @click.pass_context
 def dump(ctx, channel, outfile):
-    """Capture frames on CHANNEL and write to FILE in tcpdump format"""
+    """Capture frames on CHANNEL and write to FILE in tcpdump format."""
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(_dump(ctx, channel, outfile))

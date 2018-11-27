@@ -47,10 +47,10 @@ class Gateway(asyncio.Protocol):
         self._task_send_task = None
 
     def status(self):
-        return [self._failed_mode, 
+        return [bool(self._failed_mode),
                 self._task_send_task.done(),
                 not self._Run_Event.is_set(),
-               ] 
+                ]
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
