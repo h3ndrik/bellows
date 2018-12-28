@@ -37,6 +37,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                    self._watchdog_task.done(),
                    self._pull_frames_task.done()]
                 ]
+                
+    def stats(self):
+        return self._ezsp.stats()
 
     async def _watchdog(self, wakemeup=60):
         """run in background, checks if uart restart hangs and restart as needed."""

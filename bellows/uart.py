@@ -45,12 +45,26 @@ class Gateway(asyncio.Protocol):
         self._Run_Event = asyncio.Event()
         self._Run_Event.set()
         self._task_send_task = None
+        self._stats_frames_rx = 0
+        self._stats_frames_rx_dup = 0
+        self._stats_frames_tx = 0
+        self._stats_frames_error = 0
+        self._stats_frames_reset = 0
 
     def status(self):
         return [bool(self._failed_mode),
                 self._task_send_task.done(),
                 not self._Run_Event.is_set(),
                 ]
+    
+    def stats(self):
+        return { 
+                    "self._stats_frames_rx": self._stats_frames_rx,
+                    "self._stats_frames_tx": self._stats_frames_tx,  
+                    "self._stats_frames_rx_dup": self._stats_frames_rx_dup, 
+                    "self._stats_frames_error": self._stats_frames_error, 
+                    "self._stats_frames_reset": self._stats_frames_reset, 
+                  }
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
@@ -87,6 +101,7 @@ class Gateway(asyncio.Protocol):
         return None, data
 
     def frame_received(self, data):
+        self._stats_frames_rx += 1
         LOGGER.debug("Status _send_task.done: %s", self._task_send_task.done())
         """Frame receive handler."""
         if (data[0] & 0b10000000) == 0:
@@ -176,6 +191,7 @@ class Gateway(asyncio.Protocol):
 
     def error_frame_received(self, data):
         """Error frame receive handler."""
+        self._stats_frames_error += 1
         try:
             code = t.NcpResetCode(data[2])
         except ValueError:
@@ -202,6 +218,7 @@ class Gateway(asyncio.Protocol):
 
     async def reset(self):
         """Sends a reset frame."""
+        self._stats_frames_reset += 1
         LOGGER.debug("Sending: RESET")
         # TODO: It'd be nice to delete self._reset_future.
         if self._reset_future is not None:
@@ -266,6 +283,7 @@ class Gateway(asyncio.Protocol):
 
     def data(self, data):
         """Send a data frame."""
+        self._stats_frames_txt += 1
         self._sendq.put_nowait((data))
         LOGGER.debug("add command to send queue: %s-%s", self._task_send_task.done(), self._Run_Event.is_set())
 
