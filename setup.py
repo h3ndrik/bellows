@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="bellows",
-    version="100.7.4.3.dev0",
+    version="100.7.4.3.dev1",
     description="Library implementing EZSP",
 #    url="http://github.com/Yoda-x/bellows",
     author="orig by Russell Cloran",
