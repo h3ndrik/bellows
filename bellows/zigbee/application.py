@@ -44,7 +44,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             try:
                 await asyncio.sleep(wakemeup)
                 LOGGER.debug("watchdog: running")
-                if self._startup or bool(sum(self._ezsp.status())):
+                if self._startup or (sum(self._ezsp.status())):
                     LOGGER.error("watchdog: startup running or failed uart restart ")
                     if self._startup_task and not self._startup_task.done():
                         self._startup_task.cancel()
