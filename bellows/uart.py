@@ -283,7 +283,7 @@ class Gateway(asyncio.Protocol):
 
     def data(self, data):
         """Send a data frame."""
-        self._stats_frames_txt += 1
+        self._stats_frames_tx += 1
         self._sendq.put_nowait((data))
         LOGGER.debug("add command to send queue: %s-%s", self._task_send_task.done(), self._Run_Event.is_set())
 
