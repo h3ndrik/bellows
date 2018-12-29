@@ -145,6 +145,7 @@ class Gateway(asyncio.Protocol):
             frame_data = self._randomize(data[1:-3])
             if retrans and (self._rx_buffer[seq] == frame_data):
                 LOGGER.debug("DUP Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(data))
+                self.frames_rx_dup += 1
                 return
 
             self._rx_buffer[seq] = frame_data
