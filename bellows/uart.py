@@ -59,11 +59,11 @@ class Gateway(asyncio.Protocol):
     
     def stats(self):
         return { 
-                    "self._stats_frames_rx": self._stats_frames_rx,
-                    "self._stats_frames_tx": self._stats_frames_tx,  
-                    "self._stats_frames_rx_dup": self._stats_frames_rx_dup, 
-                    "self._stats_frames_error": self._stats_frames_error, 
-                    "self._stats_frames_reset": self._stats_frames_reset, 
+                    "stats_frames_rx": self._stats_frames_rx,
+                    "stats_frames_tx": self._stats_frames_tx,  
+                    "stats_frames_rx_dup": self._stats_frames_rx_dup, 
+                    "stats_frames_error": self._stats_frames_error, 
+                    "stats_frames_reset": self._stats_frames_reset, 
                   }
 
     def connection_made(self, transport):
@@ -145,7 +145,7 @@ class Gateway(asyncio.Protocol):
             frame_data = self._randomize(data[1:-3])
             if retrans and (self._rx_buffer[seq] == frame_data):
                 LOGGER.debug("DUP Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(data))
-                self.frames_rx_dup += 1
+                self._stats_frames_rx_dup += 1
                 return
 
             self._rx_buffer[seq] = frame_data
