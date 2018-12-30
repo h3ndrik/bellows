@@ -123,10 +123,11 @@ class Gateway(asyncio.Protocol):
         """Data frame receive handler."""
         seq = (data[0] & 0b01110000) >> 4
 
-        if data[0] & self.reTx:
-            retrans = 1
-        else:
-            retrans = 0
+        retrans = 1 if data[0] & self.reTx else 0 
+#        if data[0] & self.reTx:
+#            retrans = 1
+#        else:
+#            retrans = 0
         LOGGER.debug("Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(data))
         if self._rec_seq != seq and not retrans:
             if not self._reject_mode:
