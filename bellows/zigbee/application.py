@@ -9,6 +9,7 @@ import zigpy.util
 import zigpy.zdo
 import bellows.types as t
 import bellows.zigbee.util
+import traceback
 
 LOGGER = logging.getLogger(__name__)
 
@@ -225,6 +226,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._handle_incomingRouteErrorHandler(args[0], args[1])
 
     async def _pull_frames(self):
+        import sys
         """continously pull frames out of rec queue."""
         LOGGER.debug("Run receive queue poller")
         while True:
@@ -239,7 +241,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             try:
                 self.ezsp_callback_handler(frame_name, args)
             except Exception as e:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
                 LOGGER.debug("frame handler exception, %s", e)
+                exep_data= traceback.format_exception(exc_type, exc_value,
+                                          exc_traceback)
+                for e in exep_data:
+                    LOGGER.debug("> %s", e)
 
     def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
         try:
