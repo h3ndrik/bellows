@@ -38,6 +38,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                    self._watchdog_task.done(),
                    self._pull_frames_task.done()]
                 ]
+                
+    def stats(self):
+        return self._ezsp.stats()
 
     async def _watchdog(self, wakemeup=60):
         """run in background, checks if uart restart hangs and restart as needed."""
@@ -45,7 +48,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             try:
                 await asyncio.sleep(wakemeup)
                 LOGGER.debug("watchdog: running")
-                if self._startup or bool(sum(self._ezsp.status())):
+                if self._startup or (sum(self._ezsp.status())):
                     LOGGER.error("watchdog: startup running or failed uart restart ")
                     if self._startup_task and not self._startup_task.done():
                         self._startup_task.cancel()
@@ -55,7 +58,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                         except asyncio.CancelledError:
                             LOGGER.info("watchdog: startup terminated, catched Cancelled")
                     self._startup = False
-                    self._startup_task = asyncio.ensure_future(self._startup())
+                    self._startup_task = asyncio.ensure_future(self.startup())
             except Exception as e:
                 LOGGER.info("watchdog: catched %s",  e)
 

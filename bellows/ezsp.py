@@ -29,6 +29,9 @@ class EZSP:
 
     def status(self):
         return self._gw.status()
+        
+    def stats(self):
+        return self._gw.stats()
 
     async def connect(self, device, baudrate):
         assert self._gw is None

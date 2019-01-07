@@ -45,12 +45,26 @@ class Gateway(asyncio.Protocol):
         self._Run_Event = asyncio.Event()
         self._Run_Event.set()
         self._task_send_task = None
+        self._stats_frames_rx = 0
+        self._stats_frames_rx_dup = 0
+        self._stats_frames_tx = 0
+        self._stats_frames_error = 0
+        self._stats_frames_reset = 0
 
     def status(self):
         return [bool(self._failed_mode),
                 self._task_send_task.done(),
                 not self._Run_Event.is_set(),
                 ]
+ 
+    def stats(self):
+        return { 
+                    "stats_frames_rx": self._stats_frames_rx,
+                    "stats_frames_tx": self._stats_frames_tx,  
+                    "stats_frames_rx_dup": self._stats_frames_rx_dup, 
+                    "stats_frames_error": self._stats_frames_error, 
+                    "stats_frames_reset": self._stats_frames_reset, 
+                  }
 
     def connection_made(self, transport):
         """Callback when the uart is connected."""
@@ -87,6 +101,7 @@ class Gateway(asyncio.Protocol):
         return None, data
 
     def frame_received(self, data):
+        self._stats_frames_rx += 1
         LOGGER.debug("Status _send_task.done: %s", self._task_send_task.done())
         """Frame receive handler."""
         if (data[0] & 0b10000000) == 0:
@@ -108,10 +123,11 @@ class Gateway(asyncio.Protocol):
         """Data frame receive handler."""
         seq = (data[0] & 0b01110000) >> 4
 
-        if data[0] & self.reTx:
-            retrans = 1
-        else:
-            retrans = 0
+        retrans = 1 if data[0] & self.reTx else 0 
+#        if data[0] & self.reTx:
+#            retrans = 1
+#        else:
+#            retrans = 0
         LOGGER.debug("Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(data))
         if self._rec_seq != seq and not retrans:
             if not self._reject_mode:
@@ -130,6 +146,7 @@ class Gateway(asyncio.Protocol):
             frame_data = self._randomize(data[1:-3])
             if retrans and (self._rx_buffer[seq] == frame_data):
                 LOGGER.debug("DUP Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(data))
+                self._stats_frames_rx_dup += 1
                 return
 
             self._rx_buffer[seq] = frame_data
@@ -176,6 +193,7 @@ class Gateway(asyncio.Protocol):
 
     def error_frame_received(self, data):
         """Error frame receive handler."""
+        self._stats_frames_error += 1
         try:
             code = t.NcpResetCode(data[2])
         except ValueError:
@@ -202,6 +220,7 @@ class Gateway(asyncio.Protocol):
 
     async def reset(self):
         """Sends a reset frame."""
+        self._stats_frames_reset += 1
         LOGGER.debug("Sending: RESET")
         # TODO: It'd be nice to delete self._reset_future.
         if self._reset_future is not None:
@@ -266,6 +285,7 @@ class Gateway(asyncio.Protocol):
 
     def data(self, data):
         """Send a data frame."""
+        self._stats_frames_tx += 1
         self._sendq.put_nowait((data))
         LOGGER.debug("add command to send queue: %s-%s", self._task_send_task.done(), self._Run_Event.is_set())
 
