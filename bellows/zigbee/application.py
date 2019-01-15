@@ -101,6 +101,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._startup = True
         await self.initialize()
         await self.addEndpoint(1, 0x0104, 0x0005, [0x0020, 0x0500], [0x0020, 0x0500])
+        await self.addEndpoint(13, 0xC05E, 0x0840, [0x1000, ], [0x1000,])
         v = await e.networkInit(queue=False)
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
@@ -223,6 +224,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.handle_RouteRecord(args[0], args[4])
         elif frame_name == 'incomingRouteErrorHandler':
             self._handle_incomingRouteErrorHandler(args[0], args[1])
+        else:
+            LOGGER.INFO("Unused callhander received: %s",  frame_name,  args)
 
     async def _pull_frames(self):
         """continously pull frames out of rec queue."""
