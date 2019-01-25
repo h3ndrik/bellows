@@ -58,12 +58,12 @@ class Gateway(asyncio.Protocol):
                 ]
 
     def stats(self):
-        return { 
+        return {
                     "stats_frames_rx": self._stats_frames_rx,
-                    "stats_frames_tx": self._stats_frames_tx,  
-                    "stats_frames_rx_dup": self._stats_frames_rx_dup, 
-                    "stats_frames_error": self._stats_frames_error, 
-                    "stats_frames_reset": self._stats_frames_reset, 
+                    "stats_frames_tx": self._stats_frames_tx,
+                    "stats_frames_rx_dup": self._stats_frames_rx_dup,
+                    "stats_frames_error": self._stats_frames_error,
+                    "stats_frames_reset": self._stats_frames_reset,
                   }
 
     def connection_made(self, transport):
@@ -123,7 +123,7 @@ class Gateway(asyncio.Protocol):
         """Data frame receive handler."""
         seq = (data[0] & 0b01110000) >> 4
 
-        retrans = 1 if data[0] & self.reTx else 0 
+        retrans = 1 if data[0] & self.reTx else 0
 #        if data[0] & self.reTx:
 #            retrans = 1
 #        else:

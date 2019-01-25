@@ -29,7 +29,7 @@ class EZSP:
 
     def status(self):
         return self._gw.status()
-        
+
     def stats(self):
         return self._gw.stats()
 

@@ -38,7 +38,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                    self._watchdog_task.done(),
                    self._pull_frames_task.done()]
                 ]
-                
+
     def stats(self):
         return self._ezsp.stats()
 
@@ -102,7 +102,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._startup = True
         await self.initialize()
         await self.addEndpoint(1, 0x0104, 0x0005, [0x0020, 0x0500], [0x0020, 0x0500])
-        await self.addEndpoint(13, 0xC05E, 0x0840, [0x1000, ], [0x1000,])
+        await self.addEndpoint(13, 0xC05E, 0x0840, [0x1000, ], [0x1000, ])
         v = await e.networkInit(queue=False)
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
@@ -247,8 +247,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             except Exception as e:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 LOGGER.debug("frame handler exception, %s", e)
-                exep_data= traceback.format_exception(exc_type, exc_value,
-                                          exc_traceback)
+                exep_data = traceback.format_exception(exc_type, exc_value,
+                                                       exc_traceback)
                 for e in exep_data:
                     LOGGER.debug("> %s", e)
 
