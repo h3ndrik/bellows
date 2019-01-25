@@ -56,7 +56,7 @@ class Gateway(asyncio.Protocol):
                 self._task_send_task.done(),
                 not self._Run_Event.is_set(),
                 ]
- 
+
     def stats(self):
         return { 
                     "stats_frames_rx": self._stats_frames_rx,

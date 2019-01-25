@@ -102,6 +102,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._startup = True
         await self.initialize()
         await self.addEndpoint(1, 0x0104, 0x0005, [0x0020, 0x0500], [0x0020, 0x0500])
+        await self.addEndpoint(13, 0xC05E, 0x0840, [0x1000, ], [0x1000,])
         v = await e.networkInit(queue=False)
         if v[0] != t.EmberStatus.SUCCESS:
             if not auto_form:
@@ -168,6 +169,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         await self._ezsp.formNetwork(parameters, queue=False)
         await self._ezsp.setValue(t.EzspValueId.VALUE_STACK_TOKEN_WRITING, 1, queue=False)
+        await self._ezsp.setValue(t.EzspValueId.VALUE_MAC_PASSTHROUGH_FLAGS, 3, queue=False)
 
     async def _cfg(self, config_id, value, optional=False):
         v = await self._ezsp.setConfigurationValue(config_id, value, queue=False)
@@ -224,6 +226,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.handle_RouteRecord(args[0], args[4])
         elif frame_name == 'incomingRouteErrorHandler':
             self._handle_incomingRouteErrorHandler(args[0], args[1])
+        else:
+            LOGGER.info("Unused callhander received: %s : %s",  frame_name,  args)
 
     async def _pull_frames(self):
         import sys
@@ -338,7 +342,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         aps_frame.groupId = t.uint16_t(0)
         aps_frame.sequence = t.uint8_t(sequence)
-        LOGGER.debug("sendUnicast to 0x%04x:%s:0x%04x:TSN=%s", nwk, dst_ep, cluster, sequence)
+        LOGGER.debug("sendUnicast to NWKID:0x%04x DST_EP:%s PROFIL_ID:%s CLUSTER:0x%04x TSN:%s", nwk, dst_ep, profile,  cluster, sequence)
         try:
             v = await asyncio.wait_for(self._ezsp.sendUnicast(self.direct, nwk, aps_frame, sequence, data), timeout)
         except asyncio.TimeoutError:
