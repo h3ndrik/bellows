@@ -8,7 +8,7 @@ COMMANDS = {
     # TODO: Last four fields are length, length, array, array. Need some
     #       composite type to handle that.
     'addEndpoint': (0x02, (t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t,
-                           t.uint8_t, t.uint8_t, t.List(t.uint16_t), t.List(t.uint16_t)), (t.EzspStatus)),
+                           t.uint8_t, t.uint8_t, t.List(t.uint16_t), t.List(t.uint16_t)), (t.EzspStatus, )),
     'setPolicy': (0x55, (t.EzspPolicyId, t.EzspDecisionId), (t.EzspStatus, )),
     'getPolicy': (0x56, (t.EzspPolicyId, ), (t.EzspStatus, t.EzspDecisionId)),
     'getValue': (0xAA, (t.EzspValueId, ), (t.EzspStatus, t.LVBytes)),
