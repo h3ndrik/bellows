@@ -21,6 +21,7 @@ class Gateway(asyncio.Protocol):
     RANDOMIZE_START = 0x42
     RANDOMIZE_SEQ = 0xB8
     reTx = 0b00001000
+    ASH_TIMEOUT=2
 
     RESERVED = FLAG + ESCAPE + XON + XOFF + SUBSTITUTE + CANCEL
 
@@ -222,19 +223,35 @@ class Gateway(asyncio.Protocol):
         """Sends a reset frame."""
         self._stats_frames_reset += 1
         LOGGER.debug("Sending: RESET")
-        # TODO: It'd be nice to delete self._reset_future.
         if self._reset_future is not None:
-            LOGGER.debug("reset can only be called on a new connection")
-            await self._reset_future
-            return
-
-        self.write(self._rst_frame())
-        self._reset_future = asyncio.Future()
-
-        await self._reset_future
+            if self._failed_mode == 1: # restart ongoing
+                LOGGER.debug("cancel stale reset")
+                self._reset_future.cancel()
+                try: 
+                    await self._reset_future
+                except asyncio.CancelledError:
+                    self._reset_future = None
+            else:
+                LOGGER.debug("reset can only be called on a new connection")
+                return
+            
+        # Make sure the reset receives a rst_ack in time
+        result = False
+        while result == False:
+            self._reset_future = asyncio.Future()
+            self.write(self._rst_frame())
+            try:
+                result = await asyncio.wait_for(
+                        self._reset_future, self.ASH_TIMEOUT
+                    )
+            except asyncio.TimeoutError:
+                result = False
+                LOGGER.error("Reset NCP failed")
+            except asyncio.CancelledError:
+                    self._reset_future = None
+                
         self._reset_future = None
-
-        LOGGER.warn("Reset success")
+        LOGGER.debug("Reset success")
 
     async def _send_task(self):
         """Send queue handler."""
