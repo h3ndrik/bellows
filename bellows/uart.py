@@ -214,6 +214,8 @@ class Gateway(asyncio.Protocol):
         """Send data to the uart."""
         LOGGER.debug("Sending: %s", binascii.hexlify(data))
         self._transport.write(data)
+        self._stats_frames_tx += 1
+        
 
     def close(self):
         self._sendq.put_nowait(self.Terminator)
@@ -302,7 +304,6 @@ class Gateway(asyncio.Protocol):
 
     def data(self, data):
         """Send a data frame."""
-        self._stats_frames_tx += 1
         self._sendq.put_nowait((data))
         LOGGER.debug("add command to send queue: %s-%s", self._task_send_task.done(), self._Run_Event.is_set())
 
