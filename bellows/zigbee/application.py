@@ -19,10 +19,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     def __init__(self, ezsp, database_file=None):
         super().__init__(database_file=database_file)
-        self._ezsp = ezsp
+        self._ezsp = ezsp 
 
         self._pending = dict()
         self._multicast_table = dict()
+        self._groups = set()
         self._neighbor_table = dict()
         self._child_table = dict()
         self._route_table = dict()
@@ -127,7 +128,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._ieee = ieee[0]
         self._startup = False
         e.Run_enable()
+        _groups = set(self._groups)
         await self._read_multicast_table()
+        for group_id in _groups:
+            self.subscribe_group(group_id)
 
     async def addEndpoint(self, endpoint, profile, deviceid, input_cluster, output_cluster):
         e = self._ezsp
@@ -437,6 +441,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         e = self._ezsp
         index = None
+        if group_id in self._groups:
+            return
+        else:
+            self._groups.add(group_id)
         for entry_id in self._multicast_table.keys():
             if self._multicast_table[entry_id].multicastId == group_id:
                 LOGGER.debug("multicast group %s already subscribed", group_id)
@@ -454,11 +462,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def unsubscribe_group(self, group_id):
         # check if subscribed and then remove
         e = self._ezsp
+        self._groups.discard(group_id)
         state = 2
         for entry_id in self._multicast_table.keys():
             if self._multicast_table[entry_id].multicastId == group_id:
                 self._multicast_table[entry_id].endpoint = 0
-                self._multicast_table[entry_id].multicastId = group_id
+                self._multicast_table[entry_id].multicastId = 0
                 (state, ) = await e.setMulticastTableEntry([entry_id, self._multicast_table[entry_id]])
         return state
 
@@ -466,6 +475,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         # initialize copy of multicast_table, keep a copy in memory to speed up r/w
         e = self._ezsp
         entry_id = 0
+        self._groups = set()
         while True:
             (state, MulticastTableEntry) = await e.getMulticastTableEntry(entry_id)
 #            LOGGER.debug("read multicast entry %s status %s: %s", entry_id, state, MulticastTableEntry)
