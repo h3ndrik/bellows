@@ -153,6 +153,7 @@ class Gateway(asyncio.Protocol):
             self._rx_buffer[seq] = frame_data
             try:
                 self._application.frame_received(frame_data)
+                LOGGER.debug("Process Data frame SEQ(%s)/ReTx(%s): %s", seq, retrans,  binascii.hexlify(frame_data))
             except:
                 pass
 
