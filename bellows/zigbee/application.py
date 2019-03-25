@@ -86,8 +86,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 16)
         await self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
         await self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
-        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 60)
-        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 6)
+        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 120)
+        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 8)
         await self._cfg(c.CONFIG_APS_UNICAST_MESSAGE_COUNT, 20)
         await self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
         self._route_table_size = await self._get(c.CONFIG_ROUTE_TABLE_SIZE)
@@ -260,7 +260,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 for e in exep_data:
                     LOGGER.debug("> %s", e)
 
-    def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, binding_index, address_index, message):
+    def _handle_frame(self, message_type, aps_frame, lqi, rssi, sender, 
+            binding_index, address_index, message):
+        if message_type in (t.EmberIncomingMessageType.INCOMING_MULTICAST_LOOPBACK, 
+                            t.EmberIncomingMessageType.INCOMING_BROADCAST_LOOPBACK):
+            LOGGER.debug("drop received broadcast/multicast from self")
+            return
         try:
             device = self.get_device(nwk=sender)
         except KeyError:
@@ -269,17 +274,24 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         device.radio_details(lqi, rssi)
         try:
-            tsn, command_id, is_reply, args = self.deserialize(device, aps_frame.sourceEndpoint, aps_frame.clusterId, message)
+            tsn, command_id, is_reply, args = self.deserialize(
+                    device, aps_frame.sourceEndpoint, aps_frame.clusterId, 
+                    message)
         except ValueError as e:
-            LOGGER.error("Failed to parse message (%s) on cluster %d, because %s", binascii.hexlify(message), aps_frame.clusterId, e)
+            LOGGER.error("Failed to parse message (%s) on cluster %d, because %s",
+                    binascii.hexlify(message), aps_frame.clusterId, e)
             return
 
         if is_reply:
-            self._handle_reply(device, aps_frame, tsn, command_id, args)
+            self._handle_reply(device, aps_frame, tsn, command_id, args, 
+                    message_type=message_type)
         else:
-            self.handle_message(device, False, aps_frame.profileId, aps_frame.clusterId, aps_frame.sourceEndpoint, aps_frame.destinationEndpoint, tsn, command_id, args)
+            self.handle_message(device, False, aps_frame.profileId, 
+                    aps_frame.clusterId, aps_frame.sourceEndpoint, 
+                    aps_frame.destinationEndpoint, tsn, command_id, args, 
+                    message_type=message_type)
 
-    def _handle_reply(self, sender, aps_frame, tsn, command_id, args):
+    def _handle_reply(self, sender, aps_frame, tsn, command_id, args, **kwargs):
         try:
             send_fut, reply_fut = self._pending[tsn]
             if send_fut.done():
@@ -296,7 +308,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             # We've already handled, don't drop through to device handler
             return
 
-        self.handle_message(sender, True, aps_frame.profileId, aps_frame.clusterId, aps_frame.sourceEndpoint, aps_frame.destinationEndpoint, tsn, command_id, args)
+        self.handle_message(sender, True, aps_frame.profileId,
+                aps_frame.clusterId, aps_frame.sourceEndpoint,
+                aps_frame.destinationEndpoint, tsn, command_id, args,
+                **kwargs)
 
     def _handle_frame_failure(self, message_type, destination, aps_frame, message_tag, status, message):
         try:
@@ -332,12 +347,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence,
                       data, expect_reply=True, timeout=15, request_type='unicast'):
         if request_type == 'unicast':
-            v = await self.urequest(nwk, profile, cluster, src_ep, dst_ep, sequence,
-                                    data, expect_reply=True, timeout=15)
+            v = await self.urequest(nwk, profile, cluster, src_ep, dst_ep,
+                                    sequence, data, expect_reply=expect_reply,
+                                    timeout=timeout)
         elif request_type == 'multicast':
             v = 0
             await self.mrequest(nwk, profile, cluster, src_ep, dst_ep, sequence,
-                                data, expect_reply=False, timeout=2)
+                                data, expect_reply=False, timeout=timeout)
         return v
 
     async def mrequest(self, nwk, profile, cluster, src_ep, dst_ep, sequence,
