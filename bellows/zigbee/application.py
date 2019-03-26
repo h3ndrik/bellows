@@ -32,6 +32,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._startup_task = None
         self._watchdog_task = asyncio.ensure_future(self._watchdog())
         self._pull_frames_task = None
+        self._stackversion = 0x50000 # mimimum stackversion
 
     def status(self):
         return [self._ezsp.status(), [
@@ -69,7 +70,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await asyncio.sleep(1)
 
         await e.reset()
-        await e.version()
+        self._stackversion = await e.version()
+        LOGGER.info("EZSP StackVersion : 0x%04x", self._stackversion)
         self._pull_frames_task = asyncio.ensure_future(self._pull_frames())
         c = t.EzspConfigId
         await self._cfg(c.CONFIG_STACK_PROFILE, 2)
@@ -81,13 +83,19 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         await self._cfg(c.CONFIG_APPLICATION_ZDO_FLAGS, zdo)
         await self._cfg(c.CONFIG_TRUST_CENTER_ADDRESS_CACHE_SIZE, 2)
-        await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 32)
+        await self._cfg(c.CONFIG_ADDRESS_TABLE_SIZE, 64)
         await self._cfg(c.CONFIG_SOURCE_ROUTE_TABLE_SIZE, 16)
         await self._cfg(c.CONFIG_MAX_END_DEVICE_CHILDREN, 16)
         await self._cfg(c.CONFIG_KEY_TABLE_SIZE, 1)
         await self._cfg(c.CONFIG_TRANSIENT_KEY_TIMEOUT_S, 180, True)
-        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 120)
-        await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 8)
+        if self._stackversion > 0x64ff:
+            await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 9)
+            # with ezsp_callback_handlerstack 6.5 timeout changes
+            # timeout_shift is gone
+            # The timeout corresponding to a nonzero value N is 2^N minutes
+        else:
+            await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT, 120)
+            await self._cfg(c.CONFIG_END_DEVICE_POLL_TIMEOUT_SHIFT, 8)
         await self._cfg(c.CONFIG_APS_UNICAST_MESSAGE_COUNT, 20)
         await self._cfg(c.CONFIG_PACKET_BUFFER_COUNT, 0xff)
         self._route_table_size = await self._get(c.CONFIG_ROUTE_TABLE_SIZE)
